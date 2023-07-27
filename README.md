@@ -9,7 +9,7 @@
 |:---------------------------|
 | Note that this connector is "a work in progress" and therefore not ready to use in your production environment. |
 
-<p align="center">
+<p align="center"> 
   <img src="https://www.zivver.com/hs-fs/hubfs/ZIVVER_WORDMARK_K.png">
 </p>
 
