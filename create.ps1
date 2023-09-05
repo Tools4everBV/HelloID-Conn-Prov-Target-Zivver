@@ -9,7 +9,7 @@ $p = $person | ConvertFrom-Json
 $success = $false
 $auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
 
-# Account mapping
+# Account mapping -
 $account = [PSCustomObject]@{
     schemas = @(
         'urn:ietf:params:scim:schemas:core:2.0:User',
