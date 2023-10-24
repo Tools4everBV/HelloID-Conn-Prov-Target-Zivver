@@ -1,8 +1,8 @@
-########################################
-# HelloID-Conn-Prov-Target-Zivver-Enable
+#########################################
+# HelloID-Conn-Prov-Target-Zivver-Delete
 #
-# Version: 1.0.0
-########################################
+# Version: 1.1.0
+#########################################
 # Initialize default values
 $config = $configuration | ConvertFrom-Json
 $p = $person | ConvertFrom-Json
@@ -21,14 +21,11 @@ switch ($($config.IsDebug)) {
 
 #region functions
 function Invoke-ZivverRestMethod {
-    [CmdletBinding()]
     param (
-        [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [string]
         $Method,
 
-        [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [string]
         $Endpoint,
@@ -39,7 +36,6 @@ function Invoke-ZivverRestMethod {
         [string]
         $ContentType = 'application/json',
 
-        [Parameter(Mandatory)]
         [System.Collections.IDictionary]
         $Headers
     )
@@ -52,22 +48,21 @@ function Invoke-ZivverRestMethod {
             ContentType = $ContentType
         }
 
-        if ($Body){
+        if ($Body) {
             Write-Verbose 'Adding body to request'
             $utf8Encoding = [System.Text.Encoding]::UTF8
             $encodedBody = $utf8Encoding.GetBytes($body)
             $splatParams['Body'] = $encodedBody
         }
         Invoke-RestMethod @splatParams -Verbose:$false
-    } catch {
-        $PSCmdlet.ThrowTerminatingError($_)
+    }
+    catch {
+        Throw $_
     }
 }
 
 function Resolve-ZivverError {
-    [CmdletBinding()]
     param (
-        [Parameter(Mandatory)]
         [object]
         $ErrorObject
     )
@@ -82,7 +77,8 @@ function Resolve-ZivverError {
             $errorDetails = $ErrorObject.ErrorDetails.Message
             $httpErrorObj.ErrorDetails = "Exception: $($ErrorObject.Exception.Message), Error: $($errorDetails)"
             $httpErrorObj.FriendlyMessage = "Error: $($errorDetails)"
-        } catch {
+        }
+        catch {
             $httpErrorObj.FriendlyMessage = "Received an unexpected response. The JSON could not be converted, error: [$($_.Exception.Message)]. Original error from web service: [$($ErrorObject.Exception.Message)]"
         }
         Write-Output $httpErrorObj
@@ -97,70 +93,98 @@ try {
         throw 'Mandatory attribute [aRef] is empty.'
     }
 
-    Write-Verbose "Verify if [$account.userName] has a value"
-    if ([string]::IsNullOrEmpty($($account.userName))) {
-        throw 'Mandatory attribute [$account.userName] is empty.'
-    }
-
     Write-Verbose 'Creating authorization header'
-    $headers = [System.Collections.Generic.Dictionary[[String],[String]]]::new()
+    $headers = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
     $headers.Add("Authorization", "Bearer $($config.Token)")
     $splatParams = @{
         Headers = $headers
     }
 
-    Write-Verbose "Verifying if a Zivver account for [$($p.DisplayName)] exists"
-    $splatParams['Endpoint'] = "Users/$aRef"
-    $splatParams['Method'] = 'GET'
-    $responseUser = Invoke-ZivverRestMethod @splatParams
-    if ($responseUser.Resources.Length -lt 1){
-        throw "Zivver account for: [$($p.DisplayName)] not found. Possibly deleted"
+    try {
+        Write-Verbose "Verifying if a Zivver account for [$($p.DisplayName)] exists"
+        $splatParams['Endpoint'] = "Users/$aRef"
+        $splatParams['Method'] = 'GET'
+        $responseUser = Invoke-ZivverRestMethod @splatParams
+    }
+    catch {
+        # A '400'bad request is returned if the entity cannot be found
+        if ($_.Exception.Response.StatusCode -eq 400) {
+            $responseUser = $null
+        }
+        else {
+            throw
+        }
+    }
+
+    if ($responseUser.Length -eq 1) {
+        $action = 'Found'
+        $dryRunMessage = "Delete Zivver account for: [$($p.DisplayName)] will be executed during enforcement"
+    }
+    elseif ($responseUser.Length -lt 1) {
+        $action = 'NotFound'
+        $dryRunMessage = "Zivver account for: [$($p.DisplayName)] not found. Possibly already deleted. Skipping action"
     }
 
     # Add an auditMessage showing what will happen during enforcement
     if ($dryRun -eq $true) {
-        Write-Warning "[DryRun] Enable Zivver account for: [$($p.DisplayName)] will be executed during enforcement"
+        Write-Warning "[DryRun] $dryRunMessage"
     }
 
     # Process
     if (-not($dryRun -eq $true)) {
-        Write-Verbose "Enabling Zivver account with accountReference: [$aRef]"
-        $splatParams['Endpoint'] = "Users/$aRef"
-        $splatParams['Body'] = @{
-            "schemas" = @(
-                "urn:ietf:params:scim:schemas:core:2.0:User",
-                "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User",
-                "urn:ietf:params:scim:schemas:zivver:0.1:User"
-            )
-            "active" = "true"
-        } | ConvertTo-Json
-        $splatParams['Method'] = 'PUT'
-        $null = Invoke-ZivverRestMethod @splatParams
+        switch ($action) {
+            'Found' {
+                Write-Verbose "Delete Zivver account with accountReference: [$aRef]"
+                $splatParams['Endpoint'] = "Users/$aRef"
+                $splatParams['Body'] = @{
+                    "schemas" = @(
+                        "urn:ietf:params:scim:schemas:core:2.0:User",
+                        "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User",
+                        "urn:ietf:params:scim:schemas:zivver:0.1:User"
+                    )
+                    "active"  = "false"
+                } | ConvertTo-Json
+                $splatParams['Method'] = 'PUT'
+                $null = Invoke-ZivverRestMethod @splatParams
+
+                $auditLogs.Add([PSCustomObject]@{
+                        Message = 'Disable account was successful'
+                        IsError = $false
+                    })
+                break
+            }
+            'NotFound' {
+                $auditLogs.Add([PSCustomObject]@{
+                        Message = "Zivver account for: [$($p.DisplayName)] not found. Possibly already deleted. Skipping action"
+                        IsError = $false
+                    })
+                break
+            }
+        }
 
         $success = $true
-        $auditLogs.Add([PSCustomObject]@{
-                Message = 'Enable account was successful'
-                IsError = $false
-            })
     }
-} catch {
+}
+catch {
     $success = $false
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-ZivverError -ErrorObject $ex
-        $auditMessage = "Could not enable Zivver account. Error: $($errorObj.FriendlyMessage)"
+        $auditMessage = "Could not delete Zivver account. Error: $($errorObj.FriendlyMessage)"
         Write-Verbose "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-    } else {
-        $auditMessage = "Could not enable Zivver account. Error: $($ex.Exception.Message)"
+    }
+    else {
+        $auditMessage = "Could not delete Zivver account. Error: $($ex.Exception.Message)"
         Write-Verbose "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
     $auditLogs.Add([PSCustomObject]@{
             Message = $auditMessage
             IsError = $true
         })
-# End
-} finally {
+    # End
+}
+finally {
     $result = [PSCustomObject]@{
         Success   = $success
         Auditlogs = $auditLogs

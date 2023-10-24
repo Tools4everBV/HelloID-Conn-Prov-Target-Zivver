@@ -1,12 +1,8 @@
 # HelloID-Conn-Prov-Target-Zivver
 
-| :information_source: Information |
-|:---------------------------|
-| This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements. |
-
-| :warning: Warning |
-|:---------------------------|
-| Note that this connector is "a work in progress" and therefore not ready to use in your production environment. |
+| :information_source: Information                                                                                                                                                                                                                                                                                                                                                          |
+| :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| This repository contains the connector and configuration code only. The implementer is responsible for acquiring the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements. |
 
 <p align="center"> 
   <img src="https://www.zivver.com/hs-fs/hubfs/ZIVVER_WORDMARK_K.png">
@@ -23,14 +19,13 @@
     - [Functional description](#functional-description)
     - [Connection settings](#connection-settings)
     - [Remarks](#remarks)
+      - [Concurrent actions](#concurrent-actions)
+      - [SsoAccountKey](#ssoaccountkey)
       - [Account validation based on `$account.userName`](#account-validation-based-on-accountusername)
       - [Correlation](#correlation)
       - [Account object properties](#account-object-properties)
       - [Account object and comparison](#account-object-and-comparison)
-      - [Email aliases](#email-aliases)
       - [Updating a Zivver user account](#updating-a-zivver-user-account)
-        - [Example - updating the `active` attribute](#example---updating-the-active-attribute)
-        - [Example - updating the email aliases array attribute](#example---updating-the-email-aliases-array-attribute)
       - [Error handling](#error-handling)
         - [When the division could not be found](#when-the-division-could-not-be-found)
       - [Creation / correlation process](#creation--correlation-process)
@@ -43,28 +38,31 @@ _HelloID-Conn-Prov-Target-Zivver_ is a _target_ connector. Zivver provides secur
 
 ### SCIM based API
 
-SCIM stands for _System for Cross-domain Identity Management_. It is an open standard protocol that simplifies management of user identities and related information across different systems and domains.
+SCIM stands for _System for Cross-domain Identity Management_. It is an open standard protocol that simplifies the management of user identities and related information across different systems and domains.
 
 The HelloID connector uses the API endpoints listed in the table below.
 
-| Endpoint | Description |
-| -------- | ----------- |
-| /users   | -           |
-| /groups  | -           |
+| Endpoint | Description                                             |
+| -------- | ------------------------------------------------------- |
+| /users   | -                                                       |
+| /groups  | Named in Zivver: functional accounts (shared mailboxes) |
 
 ### Available lifecycle actions
 
 The following lifecycle events are available:
 
-| Event            | Description                                 | Notes |
-| ---------------- | ------------------------------------------- | ----- |
-| create.ps1       | Create (or update) and correlate an account | -     |
-| update.ps1       | Update the account                          | -     |
-| enable.ps1       | Enable the account                          | -     |
-| disable.ps1      | Disable the account                         | -     |
-| grant.ps1        | Grants a permission to the account          | Not tested in version `1.0.0` |
-| revoke.ps1       | Revokes a permission from the account       | Not tested in version `1.0.0` |
-| entitlements.ps1 | Retrieves all entitlements                  | Not tested in version `1.0.0` |
+| :information_source: Information                                                                |
+| :---------------------------------------------------------------------------------------------- |
+| The enable is handled in the create.ps1 script. The disable is handled in the delete.ps1 script |
+
+| Event            | Description                                                           |
+| ---------------- | --------------------------------------------------------------------- |
+| create.ps1       | Create (or update) and correlate an account. Also, enable the account |
+| update.ps1       | Update the account                                                    |
+| delete.ps1       | Only disables the account. Deleting an account is not supported       |
+| grant.ps1        | Grants permission to the account                                      |
+| revoke.ps1       | Revokes permission from the account                                   |
+| entitlements.ps1 | Retrieves all entitlements                                            |
 
 ## Getting started
 
@@ -74,30 +72,51 @@ The purpose of this connector is to _manage user account provisioning_ within Zi
 
 In addition, the connector manages:
 
-- Email aliases
-  > - Email aliases will only be added, __not__ removed
-  > - Email aliases will be added based on the contracts that are in scope of a certain business rule.
-  > - The `company` property on the contract will be set as the domain portion of the email alias.
 - Permissions / _shared mailboxes_
-
->:exclamation:It's important to note that version `1.0.0` of the connector is build on a production environment. Therefore, it has not been thoroughly tested.<br>
-
->:exclamation: Permissions and the _grant/revoke_ lifecycle actions were not available during development. In version `1.0.0` this code is developed based on documentation rather then an actual implementation.
 
 ### Connection settings
 
 The following settings are required to connect to the API.
 
-| Setting | Description                                 | Mandatory | Example |
-| ------- | ------------------------------------------- | --------- | ------- |
+| Setting | Description                                 | Mandatory | Example                  |
+| ------- | ------------------------------------------- | --------- | ------------------------ |
 | BaseUrl | The URL to the API                          | Yes       | _https://app.zivver.com_ |
-| Token   | The bearer token to authenticate to the API | Yes       | _ |
+| Token   | The bearer token to authenticate to the API | Yes       | _                        |
 
 ### Remarks
 
+#### Concurrent actions
+| :warning: Warning                                                                                                                                         |
+| :-------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Granting and revoking groups is done by editing members after receiving the group members. For this reason, the concurrent actions need to be set to `1`. |
+
+When not used it is possible to get the error below.
+
+```json
+Error:
+{
+  "code": 429,
+  "message": "Too Many Requests",
+  "emptiedBucketDetails": {
+    "limiterId": "cab",
+    "budget": 50,
+    "windowSeconds": 10
+  },
+  "reference": "https://tools.ietf.org/html/draft-polli-ratelimit-headers-02"
+}
+```
+
+#### SsoAccountKey
+| :warning: Warning                                                                               |
+| :-----------------------------------------------------------------------------------------------|
+| This connector in combination with SSO is only implemented with a Google Workspace environment. |
+
+To use Single Sign On in Zivver the `SsoAccountKey` needs to be filled. In our experience implementing this, we learned that we needed to add the `SsoAccountKey` to every `PUT` call on the `user` to Zivver. This value is not returned by Zivver when using the `GET` call.
+Please keep this in mind when editing scripts and testing.
+
 #### Account validation based on `$account.userName`
 
-The account validation in the create lifecycle action is based on a scim filter using `$account.userName`. In version `1.0.0` of the connector, `$account.userName` is mapped to `$p.Accounts.MicrosoftActiveDirectory.mail`.
+The account validation in the create lifecycle action is based on a scim filter using `$account.userName`. In version `1.1.0` of the connector, `$account.userName` is mapped to `$p.Accounts.MicrosoftActiveDirectory.UserPrincipalName`.
 
 The filter is used as follows:
 
@@ -151,79 +170,41 @@ The HelloID connector is designed to manage the following properties of the user
 
 - `name.formatted`
 - `urn:ietf:params:scim:schemas:extension:enterprise:2.0:User.division`
-- `urn:ietf:params:scim:schemas:zivver:0.1:User.aliases`
+- `urn:ietf:params:scim:schemas:zivver:0.1:User.SsoAccountKey`
 - `active`
+- `userName`
 
 >:exclamation: Properties not mentioned above, are not managed or handled by HelloID.
 
 #### Account object and comparison
 
-The account object within Zivver is a complex object. Which means that, it contains hash tables and arrays. A custom compare function is added in order to compare the Zivver account with the account object from HelloID. The full comparison logic consists of two functions. `Compare-ZivverAccountObject` and `Compare-Array`.
+The account object within Zivver is a complex object. Which means that it contains hash tables and arrays. A custom compare function is added in order to compare the Zivver account with the account object from HelloID. The full comparison logic consists of two functions. `Compare-ZivverAccountObject` and `Compare-Array`.
 
-The `Compare-ZivverAccountObject` is tailored to compare __only__ what is managed.
-
-#### Email aliases
-
-In the HelloID connector, email aliases for Zivver accounts are extracted from a person contract and added to the user's Zivver account.
-
-The email aliases are dynamically generated based on the company property found in the person contract. This ensures that each user's email alias is unique and corresponds to their respective organization.
-
->:exclamation: It's important to note that email aliases are only added, not removed, from the Zivver account.
+The `Compare-ZivverAccountObject` is tailored to compare __only__ what is managed and is only used in the update script.
 
 #### Updating a Zivver user account
 
-Zivver only supports the `HTTP.PUT` method for updating user accounts, requiring the entire user object to be included in each call. However, a partial `PUT` is also supported. In version `1.0.0` of the connector, a partial `PUT` is implemented, allowing updates to specific parts of the user object.
+Zivver only supports the `HTTP.PUT` method for updating user accounts, requiring the entire user object to be included in each call. If a partial `PUT` is used without the SsoAccountKey the SSO in Zivver will break.
 
-##### Example - updating the `active` attribute
-
-```json
-{
-    "schemas": [
-        "urn:ietf:params:scim:schemas:core:2.0:User",
-        "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User",
-        "urn:ietf:params:scim:schemas:zivver:0.1:User"
-    ],
-    "active": "false"
-}
-```
-
-##### Example - updating the email aliases array attribute
-
-```json
-{
-    "schemas": [
-        "urn:ietf:params:scim:schemas:core:2.0:User",
-        "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User",
-        "urn:ietf:params:scim:schemas:zivver:0.1:User"
-    ],
-    "urn:ietf:params:scim:schemas:zivver:0.1:User:aliases": {
-        "aliases": [
-            "j.doe@example",
-            "j.doe@anotherExample"
-        ]
-    }
-}
-```
+The Zivver user response is used and enriched with the necessary updates. This is how we ensure the entire user `GET` response is included in each `PUT` call.
 
 #### Error handling
 
 ##### When the division could not be found
 
-The account object in the `create` lifecycle action contains a property called `urn:ietf:params:scim:schemas:extension:enterprise:2.0:User.division`. In version `1.0.0` of the connector, this value is set to `p.PrimaryContract.Department.DisplayName`. If the department can't be found within Zivver, an error will be thrown (By Zivver). _Error: Invalid division: {name of division}_. As a result, the create lifecycle action will fail.
+The account object in the `create` lifecycle action contains a property called `urn:ietf:params:scim:schemas:extension:enterprise:2.0:User.division`. In version `1.1.0` of the connector, this value is set to `p.PrimaryContract.Department.DisplayName`. If the department can't be found within Zivver, an error will be thrown (By Zivver). _Error: Invalid division: {name of division}_. As a result, the create lifecycle action will fail.
 
 #### Creation / correlation process
 
-A new functionality is the possibility to update the account in the target system during the correlation process. By default, this behavior is disabled. Meaning, the account will only be created or correlated.
+It is possible to update the account in the target system during the correlation process. By default, this behavior is disabled. Meaning, the account will only be created or correlated.
 
 You can change this behavior in the ``configuration`` by setting the checkbox ``UpdatePersonOnCorrelate`` to the value of ``true``.
-
->:exclamation:Be aware that this might have unexpected implications.
 
 ## Getting help
 
 > _For more information on how to configure a HelloID PowerShell connector, please refer to our [documentation](https://docs.helloid.com/hc/en-us/articles/360012558020-Configure-a-custom-PowerShell-target-system) pages_
 
-> _If you need help, feel free to ask questions on our [forum](https://forum.helloid.com)_
+> _If you need help, feel free to ask questions on our [forum](https://forum.helloid.com/forum/helloid-connectors/provisioning/4865-helloid-conn-prov-target-zivver)_
 
 ## HelloID docs
 

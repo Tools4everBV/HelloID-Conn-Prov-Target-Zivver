@@ -1,7 +1,7 @@
 ########################################
 # HelloID-Conn-Prov-Target-Zivver-Update
 #
-# Version: 1.0.0
+# Version: 1.1.0
 ########################################
 # Initialize default values
 $config = $configuration | ConvertFrom-Json
@@ -10,26 +10,80 @@ $aRef = $AccountReference | ConvertFrom-Json
 $success = $false
 $auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
 
+#region support functions
+function Get-FullName {
+    Param (
+        [object]$person
+    )
+
+    if ([string]::IsNullOrEmpty($p.Name.Nickname)) { $calcFirstName = $p.Name.GivenName } else { $calcFirstName = $p.Name.Nickname }
+
+    $calcFullName = $calcFirstName + ' '
+
+    switch ($person.Name.Convention) {
+        'B' { 
+            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePrefix)) {
+                $calcFullName = $calcFullName + $person.Name.familyNamePrefix + ' '
+            }
+            $calcFullName = $calcFullName + $person.Name.FamilyName
+            break 
+        }
+        'P' { 
+            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePartnerPrefix)) {
+                $calcFullName = $calcFullName + $person.Name.familyNamePartnerPrefix + ' '
+            }
+            $calcFullName = $calcFullName + $person.Name.FamilyNamePartner
+            break 
+        }
+        'BP' { 
+            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePrefix)) {
+                $calcFullName = $calcFullName + $person.Name.familyNamePrefix + ' '
+            }
+            $calcFullName = $calcFullName + $person.Name.FamilyName + ' - '
+            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePartnerPrefix)) {
+                $calcFullName = $calcFullName + $person.Name.familyNamePartnerPrefix + ' '
+            }
+            $calcFullName = $calcFullName + $person.Name.FamilyNamePartner
+            break 
+        }
+        'PB' { 
+            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePartnerPrefix)) {
+                $calcFullName = $calcFullName + $person.Name.familyNamePartnerPrefix + ' '
+            }
+            $calcFullName = $calcFullName + $person.Name.FamilyNamePartner + ' - '
+            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePrefix)) {
+                $calcFullName = $calcFullName + $person.Name.familyNamePrefix + ' '
+            }
+            $calcFullName = $calcFullName + $person.Name.FamilyName
+            break 
+        }
+        Default {
+            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePrefix)) {
+                $calcFullName = $calcFullName + $person.Name.familyNamePrefix + ' '
+            }
+            $calcFullName = $calcFullName + $person.Name.FamilyName
+            break 
+        }
+    } 
+    return $calcFullName
+}
+#endregion support functions
+
 # Account mapping
 # The account object within Zivver contains a few more properties. For example, [delegates].
 # These are not managed by HelloID and therefore, not listed in the account object.
 $account = [PSCustomObject]@{
-    schemas = @(
-        'urn:ietf:params:scim:schemas:core:2.0:User',
-        'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User',
-        'urn:ietf:params:scim:schemas:zivver:0.1:User'
-    )
-    name = [PSCustomObject]@{
-        formatted = "$($p.Name.GivenName) $($p.Name.FamilyName)"
+    name  = [PSCustomObject]@{
+        formatted = Get-FullName -person $p
     }
-    'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User' = [PSCustomObject]@{
-        division = $p.PrimaryContract.Department.DisplayName
-    }
+    # 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User' = [PSCustomObject]@{
+    #     division = $p.PrimaryContract.Department.DisplayName
+    # }
     'urn:ietf:params:scim:schemas:zivver:0.1:User' = [PSCustomObject]@{
-        #SsoAccountKey = ''
-        aliases = @()
+        SsoAccountKey = $p.Accounts.MicrosoftActiveDirectory.UserPrincipalName
+        # aliases = @()
     }
-    userName = $p.Accounts.MicrosoftActiveDirectory.mail
+    userName = $p.Accounts.MicrosoftActiveDirectory.UserPrincipalName 
 }
 
 # Enable TLS1.2
@@ -43,14 +97,11 @@ switch ($($config.IsDebug)) {
 
 #region functions
 function Invoke-ZivverRestMethod {
-    [CmdletBinding()]
     param (
-        [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [string]
         $Method,
 
-        [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [string]
         $Endpoint,
@@ -61,7 +112,6 @@ function Invoke-ZivverRestMethod {
         [string]
         $ContentType = 'application/json',
 
-        [Parameter(Mandatory)]
         [System.Collections.IDictionary]
         $Headers
     )
@@ -74,22 +124,21 @@ function Invoke-ZivverRestMethod {
             ContentType = $ContentType
         }
 
-        if ($Body){
+        if ($Body) {
             Write-Verbose 'Adding body to request'
             $utf8Encoding = [System.Text.Encoding]::UTF8
             $encodedBody = $utf8Encoding.GetBytes($body)
             $splatParams['Body'] = $encodedBody
         }
         Invoke-RestMethod @splatParams -Verbose:$false
-    } catch {
-        $PSCmdlet.ThrowTerminatingError($_)
+    }
+    catch {
+        Throw $_
     }
 }
 
 function Resolve-ZivverError {
-    [CmdletBinding()]
     param (
-        [Parameter(Mandatory)]
         [object]
         $ErrorObject
     )
@@ -104,7 +153,8 @@ function Resolve-ZivverError {
             $errorDetails = $ErrorObject.ErrorDetails.Message
             $httpErrorObj.ErrorDetails = "Exception: $($ErrorObject.Exception.Message), Error: $($errorDetails)"
             $httpErrorObj.FriendlyMessage = "Error: $($errorDetails)"
-        } catch {
+        }
+        catch {
             $httpErrorObj.FriendlyMessage = "Received an unexpected response. The JSON could not be converted, error: [$($_.Exception.Message)]. Original error from web service: [$($ErrorObject.Exception.Message)]"
         }
         Write-Output $httpErrorObj
@@ -112,13 +162,10 @@ function Resolve-ZivverError {
 }
 
 function Compare-ZivverAccountObject {
-    [CmdletBinding()]
     param (
-        [Parameter(Mandatory)]
         [object]
         $ReferenceObject,
 
-        [Parameter(Mandatory)]
         [object]
         $DifferenceObject,
 
@@ -142,7 +189,8 @@ function Compare-ZivverAccountObject {
                 $differences += $key
                 $differences += $nestedDifferences
             }
-        } elseif ($referenceValue -is [Array] -and $differenceValue -is [Array]) {
+        }
+        elseif ($referenceValue -is [Array] -and $differenceValue -is [Array]) {
             if (-not (Compare-Array $referenceValue $differenceValue)) {
                 $differences += $key
                 if ($key -eq "urn:ietf:params:scim:schemas:zivver:0.1:User") {
@@ -152,7 +200,8 @@ function Compare-ZivverAccountObject {
                     $differences += "Array2: $array2"
                 }
             }
-        } elseif ($referenceValue -ne $differenceValue) {
+        }
+        elseif ($referenceValue -ne $differenceValue) {
             $differences += $key
         }
     }
@@ -160,39 +209,11 @@ function Compare-ZivverAccountObject {
     Write-Output $differences
 }
 
-function Get-EmailAliasFromContract {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [object]
-        $Person
-    )
-
-    $aliasCollection = [System.Collections.Generic.List[object]]::new()
-    $contractsSortedOnUniqueOrganization = $Person.Contracts | Sort-Object { $_.Organization.Name } -Unique
-    foreach ($contract in $contractsSortedOnUniqueOrganization){
-        if($contract.Context.InConditions){
-            $organizationName = $contract.Organization.Name.ToLower()
-            $alias = $account.userName -replace '(?<=@)[^.]+', $organizationName
-            $alias = ($alias -replace '\s', '').ToLower() # Remove spaces from the email alias
-
-            # Add the alias to the collection only if it is different from the person's business email
-            if ($alias -ne $Person.Contact.Business.Email.ToLower()) {
-                $aliasCollection.Add($alias)
-            }
-        }
-    }
-    Write-Output $aliasCollection
-}
-
 function Compare-Array {
-    [CmdletBinding()]
     param (
-        [Parameter(Mandatory)]
         [object]
         $ReferenceObject,
 
-        [Parameter(Mandatory)]
         [object]
         $DifferenceObject
     )
@@ -221,76 +242,62 @@ try {
         throw 'Mandatory attribute [aRef] is empty.'
     }
 
-    Write-Verbose "Verify if [$account.userName] has a value"
-    if ([string]::IsNullOrEmpty($($account.userName))) {
-        throw 'Mandatory attribute [$account.userName] is empty.'
-    }
-
     Write-Verbose 'Creating authorization header'
-    $headers = [System.Collections.Generic.Dictionary[[String],[String]]]::new()
+    $headers = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
     $headers.Add("Authorization", "Bearer $($config.Token)")
     $splatParams = @{
         Headers = $headers
     }
 
-    Write-Verbose "Verifying if a Zivver account for [$($p.DisplayName)] exists"
-    $splatParams['Endpoint'] = "Users/$aRef"
-    $splatParams['Method'] = 'GET'
-    $responseUser = Invoke-ZivverRestMethod @splatParams
-    if ($responseUser.Resources.Length -lt 1){
-        throw "Zivver account for: [$($p.DisplayName)] not found. Possibly deleted"
+    try {
+        Write-Verbose "Verifying if a Zivver account for [$($p.DisplayName)] exists"
+        $splatParams['Endpoint'] = "Users/$aRef"
+        $splatParams['Method'] = 'GET'
+        $responseUser = Invoke-ZivverRestMethod @splatParams
+    }
+    catch {
+        # A '400'bad request is returned if the entity cannot be found
+        if ($_.Exception.Response.StatusCode -eq 400) {
+            $responseUser = $null
+        }
+        else {
+            throw
+        }
     }
 
-    Write-Verbose 'Get current email aliases from contract and compare with what is already defined within Zivver'
-    $DesiredAliasesFromContracts = Get-EmailAliasFromContract -Person $p
-    $currentAliasesInZivver = $responseUser.'urn:ietf:params:scim:schemas:zivver:0.1:User'.aliases
-    $account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.aliases += $currentAliasesInZivver
-    foreach ($desiredAlias in $DesiredAliasesFromContracts) {
-        if ($currentAliasesInZivver -contains $desiredAlias) {
-            Write-Verbose "Desired alias [$desiredAlias] exists and will not be added to Zivver"
-        } else {
-            Write-Verbose "Desired alias [$desiredAlias] does not exist and will be added to Zivver"
-            $account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.aliases += $desiredAlias
-        }
+    if ($responseUser.Length -lt 1) {
+        throw "Zivver account for: [$($p.DisplayName)] not found. Possibly deleted"
     }
 
     Write-Verbose "Verify if Zivver account for [$($p.DisplayName)] must be updated"
     $splatCompareProperties = @{
-        ReferenceObject  = @($responseUser.resources)
-        DifferenceObject = @($account)
-        ExcludeProperties = @("delegates","id", "meta") # Properties not managed by HelloID, are excluded from the comparison.
+        ReferenceObject   = @($responseUser)
+        DifferenceObject  = @($account)
+        ExcludeProperties = @("delegates", "id", "meta", "active", "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User", "urn:ietf:params:scim:schemas:zivver:0.1:User", "schemas") # Properties not managed by HelloID, are excluded from the comparison.
     }
     $propertiesChanged = Compare-ZivverAccountObject @splatCompareProperties
 
     if ($propertiesChanged) {
         # Create the JSON body for the properties to update
-        $jsonBody = @{
-            "schemas" = @(
-                "urn:ietf:params:scim:schemas:core:2.0:User",
-                "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User",
-                "urn:ietf:params:scim:schemas:zivver:0.1:User"
-            )
+
+        if ($account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.PSObject.Properties.Name -contains 'SsoAccountKey') {
+            $responseUser.'urn:ietf:params:scim:schemas:zivver:0.1:User' | Add-Member -MemberType NoteProperty -Name "SsoAccountKey" -Value $account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.SsoAccountKey -Force
         }
 
-        if ($propertiesChanged -contains 'urn:ietf:params:scim:schemas:zivver:0.1:User'){
-            $jsonBody['urn:ietf:params:scim:schemas:zivver:0.1:User:aliases'] = @{
-                'aliases' = @($account.'urn:ietf:params:scim:schemas:zivver:0.1:User')
-            }
+        $responseUser.name.formatted = $account.name.formatted
+
+        if ($account.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.PSObject.Properties.Name -contains 'division') {
+            $responseUser.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.division = $account.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.division
         }
 
-        if ($propertiesChanged -contains 'name'){
-            $jsonbody['name'] = @{
-                'name.formatted' = $account.name.formatted
-            }
-        }
-
-        if ($propertiesChanged -contains 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'){
-            $jsonbody['division'] = $account.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.division
+        if ($account.PSObject.Properties.Name -contains 'userName') {
+            $responseUser.userName = $account.userName
         }
 
         $action = 'Update'
         $dryRunMessage = "Update Zivver account for: [$($p.DisplayName)], will be executed during enforcement. Account property(s) required to update: [$($propertiesChanged -join ", ")]"
-    } else {
+    }
+    else {
         $action = 'NoChanges'
         $dryRunMessage = 'No changes will be made to the account during enforcement'
     }
@@ -307,14 +314,14 @@ try {
                 Write-Verbose "Updating Zivver account with accountReference: [$aRef]"
                 $splatParams['Endpoint'] = "Users/$aRef"
                 $splatParams['Method'] = 'PUT'
-                $splatParams['Body'] = $jsonBody | ConvertTo-Json
+                $splatParams['Body'] = $responseUser | ConvertTo-Json
                 $null = Invoke-ZivverRestMethod @splatParams
 
                 $success = $true
                 $auditLogs.Add([PSCustomObject]@{
-                    Message = 'Update account was successful'
-                    IsError = $false
-                })
+                        Message = 'Update account was successful'
+                        IsError = $false
+                    })
                 break
             }
 
@@ -323,14 +330,15 @@ try {
 
                 $success = $true
                 $auditLogs.Add([PSCustomObject]@{
-                    Message = 'No changes will be made to the account during enforcement'
-                    IsError = $false
-                })
+                        Message = 'No changes will be made to the account during enforcement'
+                        IsError = $false
+                    })
                 break
             }
         }
     }
-} catch {
+}
+catch {
     $success = $false
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
@@ -338,7 +346,8 @@ try {
         $errorObj = Resolve-ZivverError -ErrorObject $ex
         $auditMessage = "Could not update Zivver account. Error: $($errorObj.FriendlyMessage)"
         Write-Verbose "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-    } else {
+    }
+    else {
         $auditMessage = "Could not update Zivver account. Error: $($ex.Exception.Message)"
         Write-Verbose "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
@@ -346,8 +355,9 @@ try {
             Message = $auditMessage
             IsError = $true
         })
-# End
-} finally {
+    # End
+}
+finally {
     $result = [PSCustomObject]@{
         Success   = $success
         Account   = $account

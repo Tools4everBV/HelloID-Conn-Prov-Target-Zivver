@@ -1,7 +1,7 @@
 ###################################################
 # HelloID-Conn-Prov-Target-Zivver-Entitlement-Grant
 #
-# Version: 1.0.0
+# Version: 1.1.0
 ###################################################
 # Initialize default values
 $config = $configuration | ConvertFrom-Json
@@ -22,14 +22,11 @@ switch ($($config.IsDebug)) {
 
 #region functions
 function Invoke-ZivverRestMethod {
-    [CmdletBinding()]
     param (
-        [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [string]
         $Method,
 
-        [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [string]
         $Endpoint,
@@ -40,7 +37,6 @@ function Invoke-ZivverRestMethod {
         [string]
         $ContentType = 'application/json',
 
-        [Parameter(Mandatory)]
         [System.Collections.IDictionary]
         $Headers
     )
@@ -53,22 +49,21 @@ function Invoke-ZivverRestMethod {
             ContentType = $ContentType
         }
 
-        if ($Body){
+        if ($Body) {
             Write-Verbose 'Adding body to request'
             $utf8Encoding = [System.Text.Encoding]::UTF8
             $encodedBody = $utf8Encoding.GetBytes($body)
             $splatParams['Body'] = $encodedBody
         }
         Invoke-RestMethod @splatParams -Verbose:$false
-    } catch {
-        $PSCmdlet.ThrowTerminatingError($_)
+    }
+    catch {
+        Throw $_
     }
 }
 
 function Resolve-ZivverError {
-    [CmdletBinding()]
     param (
-        [Parameter(Mandatory)]
         [object]
         $ErrorObject
     )
@@ -83,13 +78,14 @@ function Resolve-ZivverError {
             $errorDetails = $ErrorObject.ErrorDetails.Message
             $httpErrorObj.ErrorDetails = "Exception: $($ErrorObject.Exception.Message), Error: $($errorDetails)"
             $httpErrorObj.FriendlyMessage = "Error: $($errorDetails)"
-        } catch {
+        }
+        catch {
             $httpErrorObj.FriendlyMessage = "Received an unexpected response. The JSON could not be converted, error: [$($_.Exception.Message)]. Original error from web service: [$($ErrorObject.Exception.Message)]"
         }
         Write-Output $httpErrorObj
     }
 }
-#endregion
+#endregion functions
 
 # Begin
 try {
@@ -98,59 +94,106 @@ try {
         throw 'Mandatory attribute [aRef] is empty.'
     }
 
-    Write-Verbose "Verify if [$account.userName] has a value"
-    if ([string]::IsNullOrEmpty($($account.userName))) {
-        throw 'Mandatory attribute [$account.userName] is empty.'
-    }
-
     Write-Verbose 'Creating authorization header'
-    $headers = [System.Collections.Generic.Dictionary[[String],[String]]]::new()
+    $headers = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
     $headers.Add("Authorization", "Bearer $($config.Token)")
     $splatParams = @{
         Headers = $headers
     }
 
-    Write-Verbose "Verifying if a Zivver account for [$($p.DisplayName)] exists"
-    $splatParams['Endpoint'] = "Users/$aRef"
-    $splatParams['Method'] = 'GET'
-    $responseUser = Invoke-ZivverRestMethod @splatParams
-    if ($responseUser.Resources.Length -lt 1){
+    try {
+        Write-Verbose "Verifying if a Zivver account for [$($p.DisplayName)] exists"
+        $splatParams['Endpoint'] = "Users/$aRef"
+        $splatParams['Method'] = 'GET'
+        $responseUser = Invoke-ZivverRestMethod @splatParams
+    }
+    catch {
+        # A '400'bad request is returned if the entity cannot be found
+        if ($_.Exception.Response.StatusCode -eq 400) {
+            $responseUser = $null
+        }
+        else {
+            throw
+        }
+    }
+
+    if ($responseUser.Length -lt 1) {
         throw "Zivver account for: [$($p.DisplayName)] not found. Possibly deleted"
+    }
+    
+    $splatParams['Endpoint'] = "Groups/$($pRef.Reference)"
+    $splatParams['Method'] = 'GET'
+    $responseGroup = Invoke-ZivverRestMethod @splatParams
+
+    $currentMembers = $responseGroup.members
+
+    if ($currentMembers.value -contains $aRef) {
+
+        $action = 'NoChanges'
+
+        $dryRunMessage = "[DryRun] Grant Zivver entitlement: [$($pRef.Reference)] to: [$($p.DisplayName)] already granted"
+    }
+    else {
+        $memberToAdd = @{value = $aRef }
+        $currentMembers += $memberToAdd
+        [array]$updatedMembers = $currentMembers
+
+        $action = 'Grant'
+
+        $dryRunMessage = "[DryRun] Grant Zivver entitlement: [$($pRef.Reference)] to: [$($p.DisplayName)] will be executed during enforcement"
     }
 
     # Add an auditMessage showing what will happen during enforcement
     if ($dryRun -eq $true) {
-        Write-Warning "[DryRun] Grant Zivver entitlement: [$($pRef.Reference)] to: [$($p.DisplayName)] will be executed during enforcement"
+        Write-Warning $dryRunMessage
     }
 
     # Process
     if (-not($dryRun -eq $true)) {
-        Write-Verbose "Granting Zivver entitlement: [$($pRef.Reference)]"
-        $body = [PSCustomObject]@{
-            operations = @(
-                @{
-                    op    = "add"
-                    path  = "members"
-                    value = @(
-                        @{
-                            value = $aRef
-                        }
-                    )
-                }
-            )
-        }
-        $splatParams['Endpoint'] = "groups/$($pRef.Reference)"
-        $splatParams['Method'] = 'PATCH'
-        $splatParams['Body'] = $body | ConvertTo-Json
-        $null = Invoke-ZivverRestMethod @splatParams
+        switch ($action) {
+            'Grant' {
+                Write-Verbose "Granting Zivver entitlement: [$($pRef.Reference)]"
 
-        $success = $true
-        $auditLogs.Add([PSCustomObject]@{
-                Message = "Grant Zivver entitlement: [$($pRef.Reference)] was successful"
-                IsError = $false
-            })
+                $updatedMembersJSON = ,$updatedMembers | Convertto-json
+                $body = @"
+        {
+    "schemas": [
+        "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+    ],
+    "Operations": [
+        {
+            "value": $updatedMembersJSON,
+            "path": "members",
+            "op": "replace"
+        }
+    ]
+}
+"@
+
+                $splatParams['Endpoint'] = "Groups/$($pRef.Reference)"
+                $splatParams['Method'] = 'PATCH'
+                $splatParams['ContentType'] = 'application/scim+json'
+                $splatParams['Body'] = $body
+
+                $null = Invoke-ZivverRestMethod @splatParams
+
+                $success = $true
+                $auditLogs.Add([PSCustomObject]@{
+                        Message = "Grant Zivver entitlement: [$($pRef.Reference)] was successful"
+                        IsError = $false
+                    })
+            }
+            'NoChanges' {
+                $success = $true
+                $auditLogs.Add([PSCustomObject]@{
+                        Message = "Grant Zivver entitlement: [$($pRef.Reference)] was successful (already granted)"
+                        IsError = $false
+                    })
+            }
+        }
     }
-} catch {
+}
+catch {
     $success = $false
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
@@ -158,7 +201,8 @@ try {
         $errorObj = Resolve-ZivverError -ErrorObject $ex
         $auditMessage = "Could not grant Zivver account. Error: $($errorObj.FriendlyMessage)"
         Write-Verbose "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-    } else {
+    }
+    else {
         $auditMessage = "Could not grant Zivver account. Error: $($ex.Exception.Message)"
         Write-Verbose "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
@@ -166,8 +210,9 @@ try {
             Message = $auditMessage
             IsError = $true
         })
-# End
-} finally {
+    # End
+}
+finally {
     $result = [PSCustomObject]@{
         Success   = $success
         Auditlogs = $auditLogs
