@@ -105,11 +105,23 @@ try {
         Headers = $headers
     }
 
-    Write-Verbose "Verifying if a Zivver account for [$($p.DisplayName)] exists"
-    $splatParams['Endpoint'] = "Users/$aRef"
-    $splatParams['Method'] = 'GET'
-    $responseUser = Invoke-ZivverRestMethod @splatParams
-    if ($responseUser.Resources.Length -lt 1){
+    try {
+        Write-Verbose "Verifying if a Zivver account for [$($p.DisplayName)] exists"
+        $splatParams['Endpoint'] = "Users/$aRef"
+        $splatParams['Method'] = 'GET'
+        $responseUser = Invoke-ZivverRestMethod @splatParams
+    }
+    catch {
+        # A '400'bad request is returned if the entity cannot be found
+        if ($_.Exception.Response.StatusCode -eq 400) {
+            $responseUser = $null
+        }
+        else {
+            throw
+        }
+    }
+
+    if ($responseUser.Length -lt 1) {
         throw "Zivver account for: [$($p.DisplayName)] not found. Possibly deleted"
     }
 
