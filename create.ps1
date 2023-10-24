@@ -83,10 +83,10 @@ $account = [PSCustomObject]@{
         division = $p.PrimaryContract.Department.DisplayName
     }
     'urn:ietf:params:scim:schemas:zivver:0.1:User' = [PSCustomObject]@{
-        #SsoAccountKey = ''
+        SsoAccountKey = $p.Accounts.MicrosoftActiveDirectory.UserPrincipalName
         aliases = @()
     }
-    userName = $p.Accounts.MicrosoftActiveDirectory.mail
+    userName = $p.Accounts.MicrosoftActiveDirectory.UserPrincipalName 
 }
 
 # Enable TLS1.2
