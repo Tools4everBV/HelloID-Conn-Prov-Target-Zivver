@@ -168,82 +168,6 @@ function Resolve-ZivverError {
     }
 }
 
-function Compare-ZivverAccountObject {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [object]
-        $ReferenceObject,
-
-        [Parameter(Mandatory)]
-        [object]
-        $DifferenceObject,
-
-        [array]
-        $ExcludeProperties = @()
-    )
-
-    $differences = @()
-
-    foreach ($key in $ReferenceObject | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name) {
-        if ($ExcludeProperties -contains $key) {
-            continue
-        }
-
-        $referenceValue = $ReferenceObject.$key
-        $differenceValue = $DifferenceObject.$key
-
-        if ($referenceValue -is [PSCustomObject] -and $differenceValue -is [PSCustomObject]) {
-            $nestedDifferences = Compare-ZivverAccountObject -ReferenceObject $referenceValue -DifferenceObject $differenceValue -ExcludeProperties $ExcludeProperties
-            if ($nestedDifferences) {
-                $differences += $key
-                $differences += $nestedDifferences
-            }
-        } elseif ($referenceValue -is [Array] -and $differenceValue -is [Array]) {
-            if (-not (Compare-Array $referenceValue $differenceValue)) {
-                $differences += $key
-                if ($key -eq "urn:ietf:params:scim:schemas:zivver:0.1:User") {
-                    $array1 = $referenceValue -join ","
-                    $array2 = $differenceValue -join ","
-                    $differences += "Array1: $array1"
-                    $differences += "Array2: $array2"
-                }
-            }
-        } elseif ($referenceValue -ne $differenceValue) {
-            $differences += $key
-        }
-    }
-
-    Write-Output $differences
-}
-
-function Compare-Array {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [object]
-        $ReferenceObject,
-
-        [Parameter(Mandatory)]
-        [object]
-        $DifferenceObject
-    )
-
-    if ($ReferenceObject.Length -ne $DifferenceObject.Length) {
-        return $false
-    }
-
-    $sortedArr1 = $ReferenceObject | Sort-Object
-    $sortedArr2 = $DifferenceObject | Sort-Object
-
-    for ($i = 0; $i -lt $sortedArr1.Length; $i++) {
-        if ($sortedArr1[$i] -ne $sortedArr2[$i]) {
-            return $false
-        }
-    }
-
-    return $true
-}
 #endregion
 
 # Begin
@@ -273,41 +197,23 @@ try {
         $dryRunMessage = "Correlate Zivver account for: [$($p.DisplayName)], will be executed during enforcement."
 
         if ($($config.UpdatePersonOnCorrelate -eq "true")){
-            Write-Verbose "Verify if Zivver account for [$($p.DisplayName)] must be updated"
-            $splatCompareProperties = @{
-                ReferenceObject  = @($responseUser)
-                DifferenceObject = @($account)
-                ExcludeProperties = @("delegates","id", "meta") # Properties not managed by HelloID, are excluded from the comparison.
+         
+            # When correlate make user active
+            $responseUser | Add-Member -MemberType NoteProperty -Name "active" -Value $account.active -Force
+
+            if ($account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.PSObject.Properties.Name -contains 'SsoAccountKey') {
+                $responseUser.'urn:ietf:params:scim:schemas:zivver:0.1:User' | Add-Member -MemberType NoteProperty -Name "SsoAccountKey" -Value $account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.SsoAccountKey -Force
             }
-            $propertiesChanged = Compare-ZivverAccountObject @splatCompareProperties
 
-            if ($propertiesChanged) {
-                # Create the JSON body for the properties to update
-                $jsonBody = @{
-                    "schemas" = @(
-                        "urn:ietf:params:scim:schemas:core:2.0:User",
-                        "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User",
-                        "urn:ietf:params:scim:schemas:zivver:0.1:User"
-                    )
-                }
+            $responseUser.name.formatted = $account.name.formatted
 
-                if ($propertiesChanged -contains 'name'){
-                    $jsonbody['name'] = @{
-                        'name.formatted' = $account.name.formatted
-                    }
-                }
-
-                if ($propertiesChanged -contains 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'){
-                    $jsonbody['division'] = $account.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.division
-                }
-
-                $action = 'Update-OnCorrelate'
-                $dryRunMessage = "Update Zivver account for: [$($p.DisplayName)], will be executed during enforcement. Account property(s) required to update: [$($propertiesChanged -join ", ")]"
-            } else {
-                $action = 'NoChanges'
-                $dryRunMessage = 'No changes will be made to the account during enforcement'
+            if ($account.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.PSObject.Properties.Name -contains 'division') {
+                $responseUser.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.division = $account.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.division
             }
-        }
+
+            $action = 'Update-OnCorrelate'
+            $dryRunMessage = "Update Zivver account for: [$($p.DisplayName)], will be executed during enforcement."
+        }  
     }
 
     # Add a warning message showing what will happen during enforcement
@@ -337,7 +243,7 @@ try {
                 Write-Verbose "Updating Zivver account with accountReference: [$($responseUser.id)]"
                 $splatParams['Endpoint'] = "Users/$($responseUser.id)"
                 $splatParams['Method'] = 'PUT'
-                $splatParams['Body'] = $jsonBody | ConvertTo-Json
+                $splatParams['Body'] = $responseUser | ConvertTo-Json
                 $null = Invoke-ZivverRestMethod @splatParams
 
                 $accountReference = $responseUser.id
@@ -355,17 +261,6 @@ try {
                 $success = $true
                 $auditLogs.Add([PSCustomObject]@{
                     Message = "Correlate account was successful. AccountReference is: [$accountReference]"
-                    IsError = $false
-                })
-                break
-            }
-
-            'NoChanges' {
-                Write-Verbose "No changes to Zivver account with accountReference: [$aRef]"
-                $accountReference = $responseUser.id
-                $success = $true
-                $auditLogs.Add([PSCustomObject]@{
-                    Message = "No changes have been made to the account during enforcement. AccountReference is: [$accountReference]"
                     IsError = $false
                 })
                 break
