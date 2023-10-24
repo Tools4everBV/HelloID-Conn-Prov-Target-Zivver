@@ -124,57 +124,89 @@ try {
     if ($responseUser.Length -lt 1) {
         throw "Zivver account for: [$($p.DisplayName)] not found. Possibly deleted"
     }
-        $dryRunMessage = "Revoke Zivver entitlement: [$($pRef.Reference)] to: [$($p.DisplayName)] will be executed during enforcement"
-    } elseif ($responseUser.Resources.Length -lt 1){
-        $action = 'NotFound'
-        $dryRunMessage = "Zivver account for: [$($p.DisplayName)] not found. Possibly already deleted. Skipping action"
+    $splatParams['Endpoint'] = "Groups/$($pRef.Reference)"
+    $splatParams['Method'] = 'GET'
+    $responseGroup = Invoke-ZivverRestMethod @splatParams
+
+    $currentMembers = $responseGroup.members
+
+    if ($currentMembers.value -contains $aRef) {
+        [array]$updatedMembers = $currentMembers | Where-Object { $_.value -ne $aRef }
+        $action = 'Revoke'
+
+        $dryRunMessage = "[DryRun] Revoke Zivver entitlement: [$($pRef.Reference)] to: [$($p.DisplayName)] will be executed during enforcement"
+    }
+    else {
+        $action = 'NoChanges'
+
+        $dryRunMessage = "[DryRun] Revoke Zivver entitlement: [$($pRef.Reference)] to: [$($p.DisplayName)] already revoked"
     }
 
     # Add an auditMessage showing what will happen during enforcement
     if ($dryRun -eq $true) {
-        Write-Warning "[DryRun] $dryRunMessage"
+        Write-Warning $dryRunMessage
     }
 
     # Process
     if (-not($dryRun -eq $true)) {
-        switch ($action){
-            'Found' {
+        switch ($action) {
+            'Revoke' {
                 Write-Verbose "Revoking Zivver entitlement: [$($pRef.Reference)]"
-                $body = [PSCustomObject]@{
-                    operations = @(
-                        @{
-                            op    = "remove"
-                            path  = "members"
-                            value = @(
-                                @{
-                                    value = $aRef
-                                }
-                            )
-                        }
-                    )
+
+                if ($updatedMembers.Count -eq 0) {
+                    $body = @"
+        {
+    "schemas": [
+        "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+    ],
+    "Operations": [
+        {
+            "op": "remove",
+            "path": "members"
+        }
+    ]
+}
+"@
                 }
-                $splatParams['Endpoint'] = "groups/$($pRef.Reference)"
+                else {
+                    $updatedMembersJSON = , $updatedMembers | Convertto-json
+                    $body = @"
+        {
+    "schemas": [
+        "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+    ],
+    "Operations": [
+        {
+            "value": $updatedMembersJSON,
+            "path": "members",
+            "op": "replace"
+        }
+    ]
+}
+"@
+                }
+
+                $splatParams['Endpoint'] = "Groups/$($pRef.Reference)"
                 $splatParams['Method'] = 'PATCH'
-                $splatParams['Body'] = $body | ConvertTo-Json
+                $splatParams['ContentType'] = 'application/scim+json'
+                $splatParams['Body'] = $body
+
                 $null = Invoke-ZivverRestMethod @splatParams
 
+                $success = $true
                 $auditLogs.Add([PSCustomObject]@{
-                    Message = "Revoke Zivver entitlement: [$($pRef.Reference)] was successful"
-                    IsError = $false
-                })
-                break
+                        Message = "Revoke Zivver entitlement: [$($pRef.Reference)] was successful"
+                        IsError = $false
+                    })
             }
-
-            'NotFound' {
+            'NoChanges' {
+                $success = $true
                 $auditLogs.Add([PSCustomObject]@{
-                    Message = "Zivver account for: [$($p.DisplayName)] not found. Possibly already deleted. Skipping action"
-                    IsError = $false
-                })
-                break
+                        Message = "Revoke Zivver entitlement: [$($pRef.Reference)] was successful (already revoked)"
+                        IsError = $false
+                    })
             }
         }
-
-        $success = $true
     }
 } catch {
     $success = $false
