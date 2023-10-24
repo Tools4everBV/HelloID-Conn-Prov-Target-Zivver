@@ -75,7 +75,7 @@ $account = [PSCustomObject]@{
         'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User',
         'urn:ietf:params:scim:schemas:zivver:0.1:User'
     )
-    active  = $false
+    active = $true # mandatory value for Post, Remark Zivver always makes the user active when created. This value is used for 'Update-OnCorrelate'
     name = [PSCustomObject]@{
         formatted = Get-FullName -person $p
     }
