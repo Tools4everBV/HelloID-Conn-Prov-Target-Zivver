@@ -263,19 +263,19 @@ try {
     Write-Verbose "Verifying if Zivver account for [$($p.DisplayName)] must be created or correlated"
     $splatParams['Endpoint'] = "Users?filter=userName eq ""$($account.userName)"""
     $splatParams['Method'] = 'GET'
-    $responseUser = Invoke-ZivverRestMethod @splatParams
+    $responseUser = (Invoke-ZivverRestMethod @splatParams).Resources
 
-    if ($responseUser.Resources.Length -lt 1){
+    if ($responseUser.Length -lt 1){
         $action = 'Create-Correlate'
         $dryRunMessage = "Create Zivver account for: [$($p.DisplayName)], will be executed during enforcement."
-    } elseif ($responseUser.Resources | Where-Object { $_.userName -eq $account.userName }){
+    } elseif ($responseUser | Where-Object { $_.userName -eq $account.userName }){
         $action = 'Correlate'
         $dryRunMessage = "Correlate Zivver account for: [$($p.DisplayName)], will be executed during enforcement."
 
         if ($($config.UpdatePersonOnCorrelate -eq "true")){
             Write-Verbose "Verify if Zivver account for [$($p.DisplayName)] must be updated"
             $splatCompareProperties = @{
-                ReferenceObject  = @($responseUser.resources)
+                ReferenceObject  = @($responseUser)
                 DifferenceObject = @($account)
                 ExcludeProperties = @("delegates","id", "meta") # Properties not managed by HelloID, are excluded from the comparison.
             }
@@ -334,13 +334,13 @@ try {
             }
 
             'Update-OnCorrelate' {
-                Write-Verbose "Updating Zivver account with accountReference: [$($responseUser.Resources.id)]"
-                $splatParams['Endpoint'] = "Users/$($responseUser.Resources.id)"
+                Write-Verbose "Updating Zivver account with accountReference: [$($responseUser.id)]"
+                $splatParams['Endpoint'] = "Users/$($responseUser.id)"
                 $splatParams['Method'] = 'PUT'
                 $splatParams['Body'] = $jsonBody | ConvertTo-Json
                 $null = Invoke-ZivverRestMethod @splatParams
 
-                $accountReference = $responseUser.Resources.id
+                $accountReference = $responseUser.id
                 $success = $true
                 $auditLogs.Add([PSCustomObject]@{
                     Message = "Update account was successful. AccountReference is: [$accountReference]"
@@ -351,7 +351,7 @@ try {
 
             'Correlate' {
                 Write-Verbose 'Correlating Zivver account'
-                $accountReference = $responseUser.Resources.id
+                $accountReference = $responseUser.id
                 $success = $true
                 $auditLogs.Add([PSCustomObject]@{
                     Message = "Correlate account was successful. AccountReference is: [$accountReference]"
@@ -362,7 +362,7 @@ try {
 
             'NoChanges' {
                 Write-Verbose "No changes to Zivver account with accountReference: [$aRef]"
-                $accountReference = $responseUser.Resources.id
+                $accountReference = $responseUser.id
                 $success = $true
                 $auditLogs.Add([PSCustomObject]@{
                     Message = "No changes have been made to the account during enforcement. AccountReference is: [$accountReference]"
