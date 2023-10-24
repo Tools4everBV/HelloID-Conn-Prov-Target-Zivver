@@ -255,11 +255,6 @@ try {
         throw 'Mandatory attribute [aRef] is empty.'
     }
 
-    Write-Verbose "Verify if [$account.userName] has a value"
-    if ([string]::IsNullOrEmpty($($account.userName))) {
-        throw 'Mandatory attribute [$account.userName] is empty.'
-    }
-
     Write-Verbose 'Creating authorization header'
     $headers = [System.Collections.Generic.Dictionary[[String],[String]]]::new()
     $headers.Add("Authorization", "Bearer $($config.Token)")
