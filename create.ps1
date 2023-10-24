@@ -100,14 +100,11 @@ switch ($($config.IsDebug)) {
 
 #region functions
 function Invoke-ZivverRestMethod {
-    [CmdletBinding()]
     param (
-        [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [string]
         $Method,
 
-        [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [string]
         $Endpoint,
@@ -118,7 +115,6 @@ function Invoke-ZivverRestMethod {
         [string]
         $ContentType = 'application/json',
 
-        [Parameter(Mandatory)]
         [System.Collections.IDictionary]
         $Headers
     )
@@ -140,14 +136,12 @@ function Invoke-ZivverRestMethod {
         Invoke-RestMethod @splatParams -Verbose:$false
     }
     catch {
-        $PSCmdlet.ThrowTerminatingError($_)
+        Throw $_
     }
 }
 
 function Resolve-ZivverError {
-    [CmdletBinding()]
     param (
-        [Parameter(Mandatory)]
         [object]
         $ErrorObject
     )
