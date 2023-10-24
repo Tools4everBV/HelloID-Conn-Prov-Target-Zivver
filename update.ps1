@@ -97,14 +97,11 @@ switch ($($config.IsDebug)) {
 
 #region functions
 function Invoke-ZivverRestMethod {
-    [CmdletBinding()]
     param (
-        [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [string]
         $Method,
 
-        [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [string]
         $Endpoint,
@@ -115,7 +112,6 @@ function Invoke-ZivverRestMethod {
         [string]
         $ContentType = 'application/json',
 
-        [Parameter(Mandatory)]
         [System.Collections.IDictionary]
         $Headers
     )
@@ -137,14 +133,12 @@ function Invoke-ZivverRestMethod {
         Invoke-RestMethod @splatParams -Verbose:$false
     }
     catch {
-        $PSCmdlet.ThrowTerminatingError($_)
+        Throw $_
     }
 }
 
 function Resolve-ZivverError {
-    [CmdletBinding()]
     param (
-        [Parameter(Mandatory)]
         [object]
         $ErrorObject
     )
@@ -168,13 +162,10 @@ function Resolve-ZivverError {
 }
 
 function Compare-ZivverAccountObject {
-    [CmdletBinding()]
     param (
-        [Parameter(Mandatory)]
         [object]
         $ReferenceObject,
 
-        [Parameter(Mandatory)]
         [object]
         $DifferenceObject,
 
@@ -219,13 +210,10 @@ function Compare-ZivverAccountObject {
 }
 
 function Compare-Array {
-    [CmdletBinding()]
     param (
-        [Parameter(Mandatory)]
         [object]
         $ReferenceObject,
 
-        [Parameter(Mandatory)]
         [object]
         $DifferenceObject
     )
