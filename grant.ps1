@@ -124,38 +124,77 @@ try {
     if ($responseUser.Length -lt 1) {
         throw "Zivver account for: [$($p.DisplayName)] not found. Possibly deleted"
     }
+    
+    $splatParams['Endpoint'] = "Groups/$($pRef.Reference)"
+    $splatParams['Method'] = 'GET'
+    $responseGroup = Invoke-ZivverRestMethod @splatParams
+
+    $currentMembers = $responseGroup.members
+
+    if ($currentMembers.value -contains $aRef) {
+
+        $action = 'NoChanges'
+
+        $dryRunMessage = "[DryRun] Grant Zivver entitlement: [$($pRef.Reference)] to: [$($p.DisplayName)] already granted"
+    }
+    else {
+        $memberToAdd = @{value = $aRef }
+        $currentMembers += $memberToAdd
+        [array]$updatedMembers = $currentMembers
+
+        $action = 'Grant'
+
+        $dryRunMessage = "[DryRun] Grant Zivver entitlement: [$($pRef.Reference)] to: [$($p.DisplayName)] will be executed during enforcement"
+    }
 
     # Add an auditMessage showing what will happen during enforcement
     if ($dryRun -eq $true) {
-        Write-Warning "[DryRun] Grant Zivver entitlement: [$($pRef.Reference)] to: [$($p.DisplayName)] will be executed during enforcement"
+        Write-Warning $dryRunMessage
     }
 
     # Process
     if (-not($dryRun -eq $true)) {
-        Write-Verbose "Granting Zivver entitlement: [$($pRef.Reference)]"
-        $body = [PSCustomObject]@{
-            operations = @(
-                @{
-                    op    = "add"
-                    path  = "members"
-                    value = @(
-                        @{
-                            value = $aRef
-                        }
-                    )
-                }
-            )
-        }
-        $splatParams['Endpoint'] = "groups/$($pRef.Reference)"
-        $splatParams['Method'] = 'PATCH'
-        $splatParams['Body'] = $body | ConvertTo-Json
-        $null = Invoke-ZivverRestMethod @splatParams
+        switch ($action) {
+            'Grant' {
+                Write-Verbose "Granting Zivver entitlement: [$($pRef.Reference)]"
 
-        $success = $true
-        $auditLogs.Add([PSCustomObject]@{
-                Message = "Grant Zivver entitlement: [$($pRef.Reference)] was successful"
-                IsError = $false
-            })
+                $updatedMembersJSON = ,$updatedMembers | Convertto-json
+                $body = @"
+        {
+    "schemas": [
+        "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+    ],
+    "Operations": [
+        {
+            "value": $updatedMembersJSON,
+            "path": "members",
+            "op": "replace"
+        }
+    ]
+}
+"@
+
+                $splatParams['Endpoint'] = "Groups/$($pRef.Reference)"
+                $splatParams['Method'] = 'PATCH'
+                $splatParams['ContentType'] = 'application/scim+json'
+                $splatParams['Body'] = $body
+
+                $null = Invoke-ZivverRestMethod @splatParams
+
+                $success = $true
+                $auditLogs.Add([PSCustomObject]@{
+                        Message = "Grant Zivver entitlement: [$($pRef.Reference)] was successful"
+                        IsError = $false
+                    })
+            }
+            'NoChanges' {
+                $success = $true
+                $auditLogs.Add([PSCustomObject]@{
+                        Message = "Grant Zivver entitlement: [$($pRef.Reference)] was successful (already granted)"
+                        IsError = $false
+                    })
+            }
+        }
     }
 } catch {
     $success = $false
