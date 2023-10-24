@@ -1,7 +1,7 @@
 ########################################
 # HelloID-Conn-Prov-Target-Zivver-Update
 #
-# Version: 1.0.0
+# Version: 1.1.0
 ########################################
 # Initialize default values
 $config = $configuration | ConvertFrom-Json
@@ -73,7 +73,7 @@ function Get-FullName {
 # The account object within Zivver contains a few more properties. For example, [delegates].
 # These are not managed by HelloID and therefore, not listed in the account object.
 $account = [PSCustomObject]@{
-    name = [PSCustomObject]@{
+    name  = [PSCustomObject]@{
         formatted = Get-FullName -person $p
     }
     # 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User' = [PSCustomObject]@{
@@ -128,14 +128,15 @@ function Invoke-ZivverRestMethod {
             ContentType = $ContentType
         }
 
-        if ($Body){
+        if ($Body) {
             Write-Verbose 'Adding body to request'
             $utf8Encoding = [System.Text.Encoding]::UTF8
             $encodedBody = $utf8Encoding.GetBytes($body)
             $splatParams['Body'] = $encodedBody
         }
         Invoke-RestMethod @splatParams -Verbose:$false
-    } catch {
+    }
+    catch {
         $PSCmdlet.ThrowTerminatingError($_)
     }
 }
@@ -158,7 +159,8 @@ function Resolve-ZivverError {
             $errorDetails = $ErrorObject.ErrorDetails.Message
             $httpErrorObj.ErrorDetails = "Exception: $($ErrorObject.Exception.Message), Error: $($errorDetails)"
             $httpErrorObj.FriendlyMessage = "Error: $($errorDetails)"
-        } catch {
+        }
+        catch {
             $httpErrorObj.FriendlyMessage = "Received an unexpected response. The JSON could not be converted, error: [$($_.Exception.Message)]. Original error from web service: [$($ErrorObject.Exception.Message)]"
         }
         Write-Output $httpErrorObj
@@ -196,7 +198,8 @@ function Compare-ZivverAccountObject {
                 $differences += $key
                 $differences += $nestedDifferences
             }
-        } elseif ($referenceValue -is [Array] -and $differenceValue -is [Array]) {
+        }
+        elseif ($referenceValue -is [Array] -and $differenceValue -is [Array]) {
             if (-not (Compare-Array $referenceValue $differenceValue)) {
                 $differences += $key
                 if ($key -eq "urn:ietf:params:scim:schemas:zivver:0.1:User") {
@@ -206,7 +209,8 @@ function Compare-ZivverAccountObject {
                     $differences += "Array2: $array2"
                 }
             }
-        } elseif ($referenceValue -ne $differenceValue) {
+        }
+        elseif ($referenceValue -ne $differenceValue) {
             $differences += $key
         }
     }
@@ -251,7 +255,7 @@ try {
     }
 
     Write-Verbose 'Creating authorization header'
-    $headers = [System.Collections.Generic.Dictionary[[String],[String]]]::new()
+    $headers = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
     $headers.Add("Authorization", "Bearer $($config.Token)")
     $splatParams = @{
         Headers = $headers
@@ -304,7 +308,8 @@ try {
 
         $action = 'Update'
         $dryRunMessage = "Update Zivver account for: [$($p.DisplayName)], will be executed during enforcement. Account property(s) required to update: [$($propertiesChanged -join ", ")]"
-    } else {
+    }
+    else {
         $action = 'NoChanges'
         $dryRunMessage = 'No changes will be made to the account during enforcement'
     }
@@ -326,9 +331,9 @@ try {
 
                 $success = $true
                 $auditLogs.Add([PSCustomObject]@{
-                    Message = 'Update account was successful'
-                    IsError = $false
-                })
+                        Message = 'Update account was successful'
+                        IsError = $false
+                    })
                 break
             }
 
@@ -337,14 +342,15 @@ try {
 
                 $success = $true
                 $auditLogs.Add([PSCustomObject]@{
-                    Message = 'No changes will be made to the account during enforcement'
-                    IsError = $false
-                })
+                        Message = 'No changes will be made to the account during enforcement'
+                        IsError = $false
+                    })
                 break
             }
         }
     }
-} catch {
+}
+catch {
     $success = $false
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
@@ -352,7 +358,8 @@ try {
         $errorObj = Resolve-ZivverError -ErrorObject $ex
         $auditMessage = "Could not update Zivver account. Error: $($errorObj.FriendlyMessage)"
         Write-Verbose "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-    } else {
+    }
+    else {
         $auditMessage = "Could not update Zivver account. Error: $($ex.Exception.Message)"
         Write-Verbose "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
@@ -360,8 +367,9 @@ try {
             Message = $auditMessage
             IsError = $true
         })
-# End
-} finally {
+    # End
+}
+finally {
     $result = [PSCustomObject]@{
         Success   = $success
         Account   = $account
