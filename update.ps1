@@ -81,14 +81,14 @@ $account = [PSCustomObject]@{
     name = [PSCustomObject]@{
         formatted = Get-FullName -person $p
     }
-    'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User' = [PSCustomObject]@{
-        division = $p.PrimaryContract.Department.DisplayName
-    }
+    # 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User' = [PSCustomObject]@{
+    #     division = $p.PrimaryContract.Department.DisplayName
+    # }
     'urn:ietf:params:scim:schemas:zivver:0.1:User' = [PSCustomObject]@{
-        #SsoAccountKey = ''
-        aliases = @()
+        SsoAccountKey = $p.Accounts.MicrosoftActiveDirectory.UserPrincipalName
+        # aliases = @()
     }
-    userName = $p.Accounts.MicrosoftActiveDirectory.mail
+    userName = $p.Accounts.MicrosoftActiveDirectory.UserPrincipalName 
 }
 
 # Enable TLS1.2
