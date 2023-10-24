@@ -107,9 +107,9 @@ Error:
 ```
 
 #### SsoAccountKey
-| :warning: Warning                                            |
-| :----------------------------------------------------------- |
-| SSO is only implemented with a Google Workspace environment. |
+| :warning: Warning                                                                               |
+| :-----------------------------------------------------------------------------------------------|
+| This connector in combination with SSO is only implemented with a Google Workspace environment. |
 
 To use Single Sign On in Zivver the `SsoAccountKey` needs to be filled. In our experience implementing this, we learned that we needed to add the `SsoAccountKey` to every `PUT` call on the `user` to Zivver. This value is not returned by Zivver when using the `GET` call.
 Please keep this in mind when editing scripts and testing.
