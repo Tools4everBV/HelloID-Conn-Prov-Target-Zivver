@@ -73,11 +73,6 @@ function Get-FullName {
 # The account object within Zivver contains a few more properties. For example, [delegates].
 # These are not managed by HelloID and therefore, not listed in the account object.
 $account = [PSCustomObject]@{
-    schemas = @(
-        'urn:ietf:params:scim:schemas:core:2.0:User',
-        'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User',
-        'urn:ietf:params:scim:schemas:zivver:0.1:User'
-    )
     name = [PSCustomObject]@{
         formatted = Get-FullName -person $p
     }
@@ -284,30 +279,27 @@ try {
 
     Write-Verbose "Verify if Zivver account for [$($p.DisplayName)] must be updated"
     $splatCompareProperties = @{
-        ReferenceObject  = @($responseUser.resources)
-        DifferenceObject = @($account)
-        ExcludeProperties = @("delegates","id", "meta") # Properties not managed by HelloID, are excluded from the comparison.
+        ReferenceObject   = @($responseUser)
+        DifferenceObject  = @($account)
+        ExcludeProperties = @("delegates", "id", "meta", "active", "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User", "urn:ietf:params:scim:schemas:zivver:0.1:User", "schemas") # Properties not managed by HelloID, are excluded from the comparison.
     }
     $propertiesChanged = Compare-ZivverAccountObject @splatCompareProperties
 
     if ($propertiesChanged) {
         # Create the JSON body for the properties to update
-        $jsonBody = @{
-            "schemas" = @(
-                "urn:ietf:params:scim:schemas:core:2.0:User",
-                "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User",
-                "urn:ietf:params:scim:schemas:zivver:0.1:User"
-            )
+
+        if ($account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.PSObject.Properties.Name -contains 'SsoAccountKey') {
+            $responseUser.'urn:ietf:params:scim:schemas:zivver:0.1:User' | Add-Member -MemberType NoteProperty -Name "SsoAccountKey" -Value $account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.SsoAccountKey -Force
         }
 
-        if ($propertiesChanged -contains 'name'){
-            $jsonbody['name'] = @{
-                'name.formatted' = $account.name.formatted
-            }
+        $responseUser.name.formatted = $account.name.formatted
+
+        if ($account.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.PSObject.Properties.Name -contains 'division') {
+            $responseUser.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.division = $account.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.division
         }
 
-        if ($propertiesChanged -contains 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'){
-            $jsonbody['division'] = $account.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.division
+        if ($account.PSObject.Properties.Name -contains 'userName') {
+            $responseUser.userName = $account.userName
         }
 
         $action = 'Update'
@@ -329,7 +321,7 @@ try {
                 Write-Verbose "Updating Zivver account with accountReference: [$aRef]"
                 $splatParams['Endpoint'] = "Users/$aRef"
                 $splatParams['Method'] = 'PUT'
-                $splatParams['Body'] = $jsonBody | ConvertTo-Json
+                $splatParams['Body'] = $responseUser | ConvertTo-Json
                 $null = Invoke-ZivverRestMethod @splatParams
 
                 $success = $true
