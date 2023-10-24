@@ -1,7 +1,7 @@
 ###################################################
 # HelloID-Conn-Prov-Target-Zivver-Entitlement-Grant
 #
-# Version: 1.0.0
+# Version: 1.1.0
 ###################################################
 # Initialize default values
 $config = $configuration | ConvertFrom-Json
@@ -53,14 +53,15 @@ function Invoke-ZivverRestMethod {
             ContentType = $ContentType
         }
 
-        if ($Body){
+        if ($Body) {
             Write-Verbose 'Adding body to request'
             $utf8Encoding = [System.Text.Encoding]::UTF8
             $encodedBody = $utf8Encoding.GetBytes($body)
             $splatParams['Body'] = $encodedBody
         }
         Invoke-RestMethod @splatParams -Verbose:$false
-    } catch {
+    }
+    catch {
         $PSCmdlet.ThrowTerminatingError($_)
     }
 }
@@ -83,7 +84,8 @@ function Resolve-ZivverError {
             $errorDetails = $ErrorObject.ErrorDetails.Message
             $httpErrorObj.ErrorDetails = "Exception: $($ErrorObject.Exception.Message), Error: $($errorDetails)"
             $httpErrorObj.FriendlyMessage = "Error: $($errorDetails)"
-        } catch {
+        }
+        catch {
             $httpErrorObj.FriendlyMessage = "Received an unexpected response. The JSON could not be converted, error: [$($_.Exception.Message)]. Original error from web service: [$($ErrorObject.Exception.Message)]"
         }
         Write-Output $httpErrorObj
@@ -99,7 +101,7 @@ try {
     }
 
     Write-Verbose 'Creating authorization header'
-    $headers = [System.Collections.Generic.Dictionary[[String],[String]]]::new()
+    $headers = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
     $headers.Add("Authorization", "Bearer $($config.Token)")
     $splatParams = @{
         Headers = $headers
@@ -196,7 +198,8 @@ try {
             }
         }
     }
-} catch {
+}
+catch {
     $success = $false
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
@@ -204,7 +207,8 @@ try {
         $errorObj = Resolve-ZivverError -ErrorObject $ex
         $auditMessage = "Could not grant Zivver account. Error: $($errorObj.FriendlyMessage)"
         Write-Verbose "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-    } else {
+    }
+    else {
         $auditMessage = "Could not grant Zivver account. Error: $($ex.Exception.Message)"
         Write-Verbose "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
@@ -212,8 +216,9 @@ try {
             Message = $auditMessage
             IsError = $true
         })
-# End
-} finally {
+    # End
+}
+finally {
     $result = [PSCustomObject]@{
         Success   = $success
         Auditlogs = $auditLogs
