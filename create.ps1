@@ -217,31 +217,6 @@ function Compare-ZivverAccountObject {
     Write-Output $differences
 }
 
-function Get-EmailAliasFromContract {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [object]
-        $Person
-    )
-
-    $aliasCollection = [System.Collections.Generic.List[object]]::new()
-    $contractsSortedOnUniqueOrganization = $Person.Contracts | Sort-Object { $_.Organization.Name } -Unique
-    foreach ($contract in $contractsSortedOnUniqueOrganization){
-        if($contract.Context.InConditions){
-            $organizationName = $contract.Organization.Name.ToLower()
-            $alias = $account.userName -replace '(?<=@)[^.]+', $organizationName
-            $alias = ($alias -replace '\s', '').ToLower() # Remove spaces from the email alias
-
-            # Add the alias to the collection only if it is different from the person's business email
-            if ($alias -ne $Person.Contact.Business.Email.ToLower()) {
-                $aliasCollection.Add($alias)
-            }
-        }
-    }
-    Write-Output $aliasCollection
-}
-
 function Compare-Array {
     [CmdletBinding()]
     param (
@@ -292,29 +267,12 @@ try {
 
     if ($responseUser.Resources.Length -lt 1){
         $action = 'Create-Correlate'
-        Write-Verbose 'Getting email aliases from person contracts'
-        $desiredAliasesFromContracts = Get-EmailAliasFromContract -Person $p
-        $account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.aliases += $desiredAliasesFromContracts
-        $dryRunMessage = "Create Zivver account for: [$($p.DisplayName)], will be executed during enforcement. The aliases: [$($desiredAliasesFromContracts -join ', ')] will be added as Zivver email aliases."
+        $dryRunMessage = "Create Zivver account for: [$($p.DisplayName)], will be executed during enforcement."
     } elseif ($responseUser.Resources | Where-Object { $_.userName -eq $account.userName }){
         $action = 'Correlate'
         $dryRunMessage = "Correlate Zivver account for: [$($p.DisplayName)], will be executed during enforcement."
 
         if ($($config.UpdatePersonOnCorrelate -eq "true")){
-            Write-Verbose 'Get current email aliases from contract and compare with what is already defined within Zivver'
-            $desiredAliasesFromContracts = Get-EmailAliasFromContract -Person $p
-            $currentAliasesInZivver = $responseUser.resources[0].'urn:ietf:params:scim:schemas:zivver:0.1:User'.aliases
-            $account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.aliases += $currentAliasesInZivver
-
-            foreach ($desiredAlias in $desiredAliasesFromContracts) {
-                if ($currentAliasesInZivver -contains $desiredAlias) {
-                    Write-Verbose "Desired alias [$desiredAlias] exists and will not be added to Zivver"
-                } else {
-                    Write-Verbose "Desired alias [$desiredAlias] does not exist and will be added to Zivver"
-                    $account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.aliases += $desiredAlias
-                }
-            }
-
             Write-Verbose "Verify if Zivver account for [$($p.DisplayName)] must be updated"
             $splatCompareProperties = @{
                 ReferenceObject  = @($responseUser.resources)
@@ -331,12 +289,6 @@ try {
                         "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User",
                         "urn:ietf:params:scim:schemas:zivver:0.1:User"
                     )
-                }
-
-                if ($propertiesChanged -contains 'urn:ietf:params:scim:schemas:zivver:0.1:User'){
-                    $jsonBody['urn:ietf:params:scim:schemas:zivver:0.1:User:aliases'] = @{
-                        'aliases' = @($account.'urn:ietf:params:scim:schemas:zivver:0.1:User')
-                    }
                 }
 
                 if ($propertiesChanged -contains 'name'){
