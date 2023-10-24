@@ -9,6 +9,65 @@ $p = $person | ConvertFrom-Json
 $success = $false
 $auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
 
+#region support functions
+function Get-FullName {
+    Param (
+        [object]$person
+    )
+
+    if ([string]::IsNullOrEmpty($p.Name.Nickname)) { $calcFirstName = $p.Name.GivenName } else { $calcFirstName = $p.Name.Nickname }
+
+    $calcFullName = $calcFirstName + ' '
+
+    switch ($person.Name.Convention) {
+        'B' { 
+            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePrefix)) {
+                $calcFullName = $calcFullName + $person.Name.familyNamePrefix + ' '
+            }
+            $calcFullName = $calcFullName + $person.Name.FamilyName
+            break 
+        }
+        'P' { 
+            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePartnerPrefix)) {
+                $calcFullName = $calcFullName + $person.Name.familyNamePartnerPrefix + ' '
+            }
+            $calcFullName = $calcFullName + $person.Name.FamilyNamePartner
+            break 
+        }
+        'BP' { 
+            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePrefix)) {
+                $calcFullName = $calcFullName + $person.Name.familyNamePrefix + ' '
+            }
+            $calcFullName = $calcFullName + $person.Name.FamilyName + ' - '
+            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePartnerPrefix)) {
+                $calcFullName = $calcFullName + $person.Name.familyNamePartnerPrefix + ' '
+            }
+            $calcFullName = $calcFullName + $person.Name.FamilyNamePartner
+            break 
+        }
+        'PB' { 
+            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePartnerPrefix)) {
+                $calcFullName = $calcFullName + $person.Name.familyNamePartnerPrefix + ' '
+            }
+            $calcFullName = $calcFullName + $person.Name.FamilyNamePartner + ' - '
+            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePrefix)) {
+                $calcFullName = $calcFullName + $person.Name.familyNamePrefix + ' '
+            }
+            $calcFullName = $calcFullName + $person.Name.FamilyName
+            break 
+        }
+        Default {
+            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePrefix)) {
+                $calcFullName = $calcFullName + $person.Name.familyNamePrefix + ' '
+            }
+            $calcFullName = $calcFullName + $person.Name.FamilyName
+            break 
+        }
+    } 
+    return $calcFullName
+}
+#endregion support functions
+
 # Account mapping -
 $account = [PSCustomObject]@{
     schemas = @(
@@ -18,7 +77,7 @@ $account = [PSCustomObject]@{
     )
     active  = $false
     name = [PSCustomObject]@{
-        formatted = "$($p.Name.GivenName) $($p.Name.FamilyName)"
+        formatted = Get-FullName -person $p
     }
     'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User' = [PSCustomObject]@{
         division = $p.PrimaryContract.Department.DisplayName
