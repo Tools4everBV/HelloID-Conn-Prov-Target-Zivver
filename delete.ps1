@@ -118,7 +118,7 @@ try {
 
     if ($responseUser.Length -eq 1) {
         $action = 'Found'
-        $dryRunMessage = "Disable Zivver account for: [$($p.DisplayName)] will be executed during enforcement"
+        $dryRunMessage = "Delete Zivver account for: [$($p.DisplayName)] will be executed during enforcement"
     }
     elseif ($responseUser.Length -lt 1) {
         $action = 'NotFound'
@@ -134,7 +134,7 @@ try {
     if (-not($dryRun -eq $true)) {
         switch ($action) {
             'Found' {
-                Write-Verbose "Disable Zivver account with accountReference: [$aRef]"
+                Write-Verbose "Delete Zivver account with accountReference: [$aRef]"
                 $splatParams['Endpoint'] = "Users/$aRef"
                 $splatParams['Body'] = @{
                     "schemas" = @(
@@ -171,11 +171,11 @@ catch {
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-ZivverError -ErrorObject $ex
-        $auditMessage = "Could not disable Zivver account. Error: $($errorObj.FriendlyMessage)"
+        $auditMessage = "Could not delete Zivver account. Error: $($errorObj.FriendlyMessage)"
         Write-Verbose "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     }
     else {
-        $auditMessage = "Could not disable Zivver account. Error: $($ex.Exception.Message)"
+        $auditMessage = "Could not delete Zivver account. Error: $($ex.Exception.Message)"
         Write-Verbose "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
     $auditLogs.Add([PSCustomObject]@{
