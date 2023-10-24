@@ -79,12 +79,12 @@ $account = [PSCustomObject]@{
     name = [PSCustomObject]@{
         formatted = Get-FullName -person $p
     }
-    'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User' = [PSCustomObject]@{
-        division = $p.PrimaryContract.Department.DisplayName
-    }
+    # 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User' = [PSCustomObject]@{
+    #     division = $p.PrimaryContract.Department.DisplayName
+    # }
     'urn:ietf:params:scim:schemas:zivver:0.1:User' = [PSCustomObject]@{
         SsoAccountKey = $p.Accounts.MicrosoftActiveDirectory.UserPrincipalName
-        aliases = @()
+        # aliases = @()
     }
     userName = $p.Accounts.MicrosoftActiveDirectory.UserPrincipalName 
 }
