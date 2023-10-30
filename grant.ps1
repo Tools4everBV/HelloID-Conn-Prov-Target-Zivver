@@ -154,7 +154,8 @@ try {
             'Grant' {
                 Write-Verbose "Granting Zivver entitlement: [$($pRef.Reference)]"
 
-                $updatedMembersJSON = ,$updatedMembers | Convertto-json
+                # Force object to an Array also if PS object only has one value.
+                $updatedMembersJSON = ConvertTo-Json -InputObject @($updatedMembers)
                 $body = @"
         {
     "schemas": [
