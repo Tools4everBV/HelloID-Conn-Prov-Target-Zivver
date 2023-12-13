@@ -330,7 +330,7 @@ try {
 
                 $success = $true
                 $auditLogs.Add([PSCustomObject]@{
-                        Message = 'No changes will be made to the account during enforcement'
+                        Message = "No changes to Zivver account with accountReference: [$aRef]"
                         IsError = $false
                     })
                 break
