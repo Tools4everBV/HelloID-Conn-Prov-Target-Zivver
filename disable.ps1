@@ -1,7 +1,7 @@
-#################################################
-# HelloID-Conn-Prov-Target-Zivver-Create
+##################################################
+# HelloID-Conn-Prov-Target-Zivver-Disable
 # PowerShell V2
-#################################################
+##################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
@@ -11,29 +11,6 @@ switch ($actionContext.Configuration.isDebug) {
     $true { $VerbosePreference = 'Continue' }
     $false { $VerbosePreference = 'SilentlyContinue' }
 }
-
-#region mapping
-# Change mapping here
-$account = [PSCustomObject]@{
-    schemas                                                      = @(
-        'urn:ietf:params:scim:schemas:core:2.0:User',
-        'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User',
-        'urn:ietf:params:scim:schemas:zivver:0.1:User'
-    )
-    active                                                       = $actionContext.Data.active
-    name                                                         = [PSCustomObject]@{
-        formatted = $actionContext.Data.fullname
-    }
-    'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User' = [PSCustomObject]@{
-        division = $actionContext.Data.division # If the division can't be found within Zivver, an error will be thrown (By Zivver). Error: Invalid division: {name of division}
-    }
-    'urn:ietf:params:scim:schemas:zivver:0.1:User'               = [PSCustomObject]@{
-        SsoAccountKey = $actionContext.Data.ssoAccountKey
-        # aliases = @()
-    }
-    userName                                                     = $actionContext.Data.userName
-}
-#endregion mapping
 
 #region functions
 function Invoke-ZivverRestMethod {
@@ -111,25 +88,13 @@ function Resolve-ZivverError {
 #endregion functions
 
 try {
-    #region Verify correlation configuration and properties
-    $actionMessage = "verifying correlation configuration and properties"
+    #region Verify account reference
+    $actionMessage = "verifying account reference"
+    if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
+        throw "The account reference could not be found"
+    }
+    #endregion Verify account reference
 
-    if ($actionContext.CorrelationConfiguration.Enabled -eq $true) {
-        $correlationField = $actionContext.CorrelationConfiguration.accountField
-        $correlationValue = $actionContext.CorrelationConfiguration.accountFieldValue
-        if ([string]::IsNullOrEmpty($correlationField)) {
-            throw "Correlation is enabled but not configured correctly."
-        }
-        
-        if ([string]::IsNullOrEmpty($correlationValue)) {
-            throw "The correlation value for [$correlationField] is empty. This is likely a mapping issue."
-        }
-    }
-    else {
-        throw "Configuration of correlation is madatory."
-    }
-    #endregion Verify correlation configuration and properties
-    
     #region Create authorization headers
     $actionMessage = "creating authorization headers"
 
@@ -143,84 +108,115 @@ try {
 
     $getZivverSplatParams = @{
         Headers  = $headers
-        Endpoint = "Users?filter=$correlationField eq ""$correlationValue"""
+        Endpoint = "Users/$($actionContext.References.Account)"
         Method   = 'GET'
     }
-
-    $correlatedAccount = (Invoke-ZivverRestMethod @getZivverSplatParams).Resources
-        
-    Write-Verbose "Queried Ziver account where [$($correlationField)] = [$($correlationValue)]. Result: $($correlatedAccount | ConvertTo-Json)"
+    try {
+        $correlatedAccount = Invoke-ZivverRestMethod @getZivverSplatParams
+    }
+    catch {
+        # A '400'bad request is returned if the entity cannot be found
+        if ($_.Exception.Response.StatusCode -eq 400) {
+            $correlatedAccount = $null
+        }
+        else {
+            throw
+        }
+    }
+    Write-Verbose "Queried Ziver account where [id] = [$($actionContext.References.Account)]. Result: $($correlatedAccount | ConvertTo-Json)"
     #endregion Get Zivver account
 
     #region Calulate action
     $actionMessage = "calculating action"
-    if (($correlatedAccount | Measure-Object).count -eq 0) {
-        $actionAccount = "Create"
-    }
-    elseif (($correlatedAccount | Measure-Object).count -eq 1) {
-        $actionAccount = "Correlate"
+    if (($correlatedAccount | Measure-Object).count -eq 1) {
+        if ([string]$correlatedAccount.active -eq $actionContext.Data.active) {
+            $actionAccount = "NoChanges"
+        }
+        else {
+            $actionAccount = "Disable"
+        } 
     }
     elseif (($correlatedAccount | Measure-Object).count -gt 1) {
         $actionAccount = "MultipleFound"
+    }
+    elseif (($correlatedAccount | Measure-Object).count -eq 0) {
+        $actionAccount = "NotFound"
     }
     #endregion Calulate action
 
     #region Process
     switch ($actionAccount) {
-        "Create" {
-            $actionMessage = "creating account"
-            # Create account with only required fields
+        "Disable" {
+            #region Update account
+            $actionMessage = "disabling account"
 
-            $postZivverSplatParams = @{
-                Headers  = $headers
-                Endpoint = 'Users'
-                Method   = 'POST'
-                Body     = $account | ConvertTo-Json
+            $body = @{
+                "schemas" = @(
+                    "urn:ietf:params:scim:schemas:core:2.0:User",
+                    "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User",
+                    "urn:ietf:params:scim:schemas:zivver:0.1:User"
+                )
+                "active"  = $actionContext.Data.active
             }
 
-            Write-Verbose "SplatParams: $($postZivverSplatParams | ConvertTo-Json)"
+            $putZivverSplatParams = @{
+                Headers  = $headers
+                Endpoint = "Users/$($actionContext.References.Account)"
+                Method   = 'PUT'
+                Body     = $body | ConvertTo-Json
+            }
+
+            Write-Verbose "SplatParams: $($putZivverSplatParams | ConvertTo-Json)"
 
             if (-Not($actionContext.DryRun -eq $true)) {
-                $createdAccount = Invoke-ZivverRestMethod @postZivverSplatParams
-
-                $outputContext.AccountReference = $createdAccount.id
-                $outputData = $createdAccount
-
+                $null = Invoke-ZivverRestMethod @putZivverSplatParams
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Account with userName [$($createdAccount.userName)] and AccountReference [$($outputContext.AccountReference)] created."
+                        Message = "Account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)] disabled."
                         IsError = $false
                     })
             }
             else {
-                Write-Warning "DryRun: Would create account with userName [$($actionContext.Data.userName)]."
+                Write-Warning "DryRun: Would disable account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
             }
 
             break
         }
 
-        "Correlate" {
-            $actionMessage = "correlating to account"
-
-            $outputContext.AccountReference = $correlatedAccount.id
-            $outputData = $correlatedAccount
+        "NoChanges" {
+            #region No changes
+            $actionMessage = "disabling account"
 
             $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Action  = "CorrelateAccount" # Optionally specify a different action for this audit log
-                    Message = "Account with userName [$($correlatedAccount.userName)] and AccountReference [$($outputContext.AccountReference)] correlated on [$($correlationField)] = [$($correlationValue)]."
+                    Message = "Account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)] is already disabled."
                     IsError = $false
                 })
-
-            $outputContext.AccountCorrelated = $true
+            #endregion No changes
 
             break
         }
 
         "MultipleFound" {
-            $actionMessage = "correlating to account"
+            #region Multiple accounts found
+            $actionMessage = "disabling account"
 
             # Throw terminal error
-            throw "Multiple accounts found where [$($correlationField)] = [$($correlationValue)]. Please correct this so the persons are unique."
+            throw "Multiple accounts found with AccountReference [$($actionContext.References.Account)]. Please correct this so the persons are unique."
+            #endregion Multiple accounts found
+
+            break
+        }
+
+        "NotFound" {
+            #region No account found
+            $actionMessage = "disabling account"
+        
+            # If account is not found on delete the action is skipped
+            $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    Message = "Account with AccountReference [$($actionContext.References.Account)] not found (skipped action). Possibly indicating that it could be deleted, or not correlated."
+                    IsError = $false
+                })
+            #endregion No account found
 
             break
         }
@@ -251,23 +247,20 @@ finally {
     }
     else {
         $outputContext.Success = $true
-        
+
         # Change mapping here
         # Define your mapping here for returning the correct data to HelloID
         $outputDataObject = [PSCustomObject]@{
-            id            = $outputData.id
-            active        = [string]$outputData.active # value is returned as boleaan
-            fullname      = $outputData.name.formatted
-            division      = $outputData.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.division
-            ssoAccountKey = $account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.ssoAccountKey # ssoAccountKey is not returned by Zivver, account is mapped to make sure the same value is returned
-            userName      = $outputData.userName
+            active = [string]$actionContext.Data.active # value is returned as boleaan
         }
         Write-Verbose "output data to HelloID: [$($outputDataObject | Convertto-json)]"
         $outputContext.Data = $outputDataObject
-    }
-
-    # Check if accountreference is set, if not set, set this with default value as this must contain a value
-    if ([String]::IsNullOrEmpty($outputContext.AccountReference) -and $actionContext.DryRun -eq $true) {
-        $outputContext.AccountReference = "DryRun: Currently not available"
+                
+        # Define your mapping here for returning the correct previous data to HelloID
+        $outputPreviousDataObject = [PSCustomObject]@{
+            active = [string]$correlatedAccount.active # value is returned as boleaan
+        }
+        Write-Verbose "output previous data to HelloID: [$($outputPreviousDataObject | Convertto-json)]"
+        $outputContext.PreviousData = $outputPreviousDataObject
     }
 }

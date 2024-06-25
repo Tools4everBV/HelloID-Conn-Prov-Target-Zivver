@@ -1,36 +1,32 @@
 # HelloID-Conn-Prov-Target-Zivver
 
-| :information_source: Information                                                                                                                                                                                                                                                                                                                                                          |
-| :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| This repository contains the connector and configuration code only. The implementer is responsible for acquiring the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements. |
+> [!IMPORTANT]
+> This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements.
 
 <p align="center"> 
-  <img src="https://www.zivver.com/hs-fs/hubfs/ZIVVER_WORDMARK_K.png">
+  <img src="https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Zivver/blob/main/Logo.png?raw=true">
 </p>
 
 ## Table of contents
 
 - [HelloID-Conn-Prov-Target-Zivver](#helloid-conn-prov-target-zivver)
-  - [Table of contents](#table-of-contents)
-  - [Introduction](#introduction)
-    - [SCIM based API](#scim-based-api)
-    - [Available lifecycle actions](#available-lifecycle-actions)
-  - [Getting started](#getting-started)
-    - [Functional description](#functional-description)
-    - [Connection settings](#connection-settings)
-    - [Remarks](#remarks)
-      - [Concurrent actions](#concurrent-actions)
-      - [SsoAccountKey](#ssoaccountkey)
-      - [Account validation based on `$account.userName`](#account-validation-based-on-accountusername)
-      - [Correlation](#correlation)
-      - [Account object properties](#account-object-properties)
-      - [Account object and comparison](#account-object-and-comparison)
-      - [Updating a Zivver user account](#updating-a-zivver-user-account)
-      - [Error handling](#error-handling)
-        - [When the division could not be found](#when-the-division-could-not-be-found)
-      - [Creation / correlation process](#creation--correlation-process)
-  - [Getting help](#getting-help)
-  - [HelloID docs](#helloid-docs)
+  - [Table of contents](#table-of-contents)
+  - [Introduction](#introduction)
+    - [SCIM based API](#scim-based-api)
+    - [Available lifecycle actions](#available-lifecycle-actions)
+  - [Getting started](#getting-started)
+    - [Functional description](#functional-description)
+    - [Connection settings](#connection-settings)
+    - [Correlation configuration](#correlation-configuration)
+    - [Field mapping](#field-mapping)
+    - [Remarks](#remarks)
+      - [Concurrent actions](#concurrent-actions)
+      - [SsoAccountKey](#ssoaccountkey)
+      - [Updating a Zivver user account](#updating-a-zivver-user-account)
+      - [Error handling](#error-handling)
+        - [When the division could not be found](#when-the-division-could-not-be-found)
+  - [Getting help](#getting-help)
+  - [HelloID docs](#helloid-docs)
 
 ## Introduction
 
@@ -42,27 +38,30 @@ SCIM stands for _System for Cross-domain Identity Management_. It is an open sta
 
 The HelloID connector uses the API endpoints listed in the table below.
 
-| Endpoint | Description                                             |
-| -------- | ------------------------------------------------------- |
-| /users   | -                                                       |
-| /groups  | Named in Zivver: functional accounts (shared mailboxes) |
+| Endpoint | Description                                                           |
+| -------- | --------------------------------------------------------------------- |
+| /users   | `GET / POST / PATCH` actions to read and write the user in Zivver     |
+| /groups  | `GET / PATCH` actions to read and write functional accounts in Zivver |
+
+> [!TIP]
+> _For more information on the Zivver API, please refer to the [Zivver website](https://docs.zivver.com/en/admin/integrations/scim-v2.html)_.
 
 ### Available lifecycle actions
 
 The following lifecycle events are available:
 
-| :information_source: Information                                                                |
-| :---------------------------------------------------------------------------------------------- |
-| The enable is handled in the create.ps1 script. The disable is handled in the delete.ps1 script |
-
-| Event            | Description                                                           |
-| ---------------- | --------------------------------------------------------------------- |
-| create.ps1       | Create (or update) and correlate an account. Also, enable the account |
-| update.ps1       | Update the account                                                    |
-| delete.ps1       | Only disables the account. Deleting an account is not supported       |
-| grant.ps1        | Grants permission to the account                                      |
-| revoke.ps1       | Revokes permission from the account                                   |
-| entitlements.ps1 | Retrieves all entitlements                                            |
+| Event                | Description                                                           |
+| -------------------- | --------------------------------------------------------------------- |
+| create.ps1           | Create (or update) and correlate an account. Also, enable the account |
+| enable.ps1           | Enable the account                                                    |
+| update.ps1           | Update the account                                                    |
+| disable.ps1          | Disable the account                                                   |
+| delete.ps1           | Only disables the account. Deleting an account is not supported       |
+| grantPermission.ps1  | Grants permission to the account                                      |
+| revokePermission.ps1 | Revokes permission from the account                                   |
+| entitlements.ps1     | Retrieves all entitlements                                            |
+| configuration.json   | Default _configuration.json_                                          |
+| fieldMapping.json    | Default _fieldMapping.json_                                           |
 
 ## Getting started
 
@@ -72,7 +71,7 @@ The purpose of this connector is to _manage user account provisioning_ within Zi
 
 In addition, the connector manages:
 
-- Permissions / _shared mailboxes_
+- Permissions / Named in Zivver: functional accounts
 
 ### Connection settings
 
@@ -83,88 +82,60 @@ The following settings are required to connect to the API.
 | BaseUrl | The URL to the API                          | Yes       | _https://app.zivver.com_ |
 | Token   | The bearer token to authenticate to the API | Yes       | _                        |
 
+### Correlation configuration
+
+The correlation configuration is used to specify which properties will be used to match an existing account within _Zivver_ to a person in _HelloID_.
+
+To properly setup the correlation:
+
+1. Open the `Correlation` tab.
+
+2. Specify the following configuration:
+
+ | Setting                   | Value      |
+ | ------------------------- | ---------- |
+ | Enable correlation        | `True`     |
+ | Person correlation field  | ``         |
+ | Account correlation field | `userName` |
+
+> [!TIP]
+> _For more information on correlation, please refer to our correlation [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems/correlation.html) pages_.
+
+### Field mapping
+
+The field mapping can be imported by using the [_fieldMapping.json_](./fieldMapping.json) file.
+
+> [!NOTE]
+> Mapping a `SCIM` property like `urn:ietf:params:scim:schemas:extension:enterprise:2.0:User.division` is not possible in the field mapping. For this reason, the field mapping is mapped in the Powershell account lifecycle scripts. When adding additional fields please keep in mind you have to enrich the mapping in the PowerShell scripts. Search for `Change mapping here` for all the mapping locations in the Powershell account lifecycle scripts.
+
 ### Remarks
 
 #### Concurrent actions
-| :warning: Warning                                                                                                                                         |
-| :-------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Granting and revoking groups is done by editing members after receiving the group members. For this reason, the concurrent actions need to be set to `1`. |
 
-When not used it is possible to get the error below.
+> [!IMPORTANT]
+> Granting and revoking groups is done by editing members after receiving the group members. For this reason, the concurrent actions need to be set to `1`.
+
+When HelloID sends too many requests it is possible to receive the error below.
 
 ```json
 Error:
 {
-  "code": 429,
-  "message": "Too Many Requests",
-  "emptiedBucketDetails": {
-    "limiterId": "cab",
-    "budget": 50,
-    "windowSeconds": 10
-  },
-  "reference": "https://tools.ietf.org/html/draft-polli-ratelimit-headers-02"
+  "code": 429,
+  "message": "Too Many Requests",
+  "emptiedBucketDetails": {
+    "limiterId": "cab",
+    "budget": 50,
+    "windowSeconds": 10
+ },
+  "reference": "https://tools.ietf.org/html/draft-polli-ratelimit-headers-02"
 }
 ```
 
 #### SsoAccountKey
-| :warning: Warning                                                                               |
-| :-----------------------------------------------------------------------------------------------|
-| This connector in combination with SSO is only implemented with a Google Workspace environment. |
-
 To use Single Sign On in Zivver the `SsoAccountKey` needs to be filled. In our experience implementing this, we learned that we needed to add the `SsoAccountKey` to every `PUT` call on the `user` to Zivver. This value is not returned by Zivver when using the `GET` call.
-Please keep this in mind when editing scripts and testing.
 
-#### Account validation based on `$account.userName`
-
-The account validation in the create lifecycle action is based on a scim filter using `$account.userName`. In version `1.1.0` of the connector, `$account.userName` is mapped to `$p.Accounts.MicrosoftActiveDirectory.UserPrincipalName`.
-
-The filter is used as follows:
-
-```powershell
-$response = Invoke-RestMethod -Uri "$($config.BaseUrl)/api/scim/v2/Users?filter=userName eq `"user@domain.nl`""
-```
-> Other lifecycle actions use the `$aRef` in order to search for users within Zivver.
-
-#### Correlation
-
-The account correlation is based on the `id` of the user entity within Zivver.
-
-#### Account object properties
-
-Currently, a Zivver account object contains the following properties:
-
-```json
-{
-  "id": "ea7f1807-5cc2-4aea-b6c3-57ad0a01443d",
-  "name": {
-    "formatted": "Dave Graaf"
-  },
-  "meta": {
-    "created": "2021-03-16",
-    "location": "/scim/v2/Users/ea7f1807-5cc2-4aea-b6c3-57ad0a01443d",
-    "resourceType": "User"
-  },
-  "phoneNumbers": [],
-  "schemas": [
-    "urn:ietf:params:scim:schemas:core:2.0:User",
-    "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User",
-    "urn:ietf:params:scim:schemas:zivver:0.1:User"
-  ],
-  "userName": "d.graaf@example",
-  "active": true,
-  "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User": {
-    "division": "Development"
-  },
-  "urn:ietf:params:scim:schemas:zivver:0.1:User": {
-    "aliases": [
-      "d.graaf@example"
-    ],
-    "delegates": [
-      "c.brink@example",
-    ]
-  }
-}
-```
+> [!IMPORTANT]
+> Because Zivver doesn't return `SsoAccountKey` in the `GET` call. The connector doesn't know when to update this value. The connector now only updates this field when another value requires an update. Please keep this in mind while implementing this connector. 
 
 The HelloID connector is designed to manage the following properties of the user object:
 
@@ -176,12 +147,6 @@ The HelloID connector is designed to manage the following properties of the user
 
 >:exclamation: Properties not mentioned above, are not managed or handled by HelloID.
 
-#### Account object and comparison
-
-The account object within Zivver is a complex object. Which means that it contains hash tables and arrays. A custom compare function is added in order to compare the Zivver account with the account object from HelloID. The full comparison logic consists of two functions. `Compare-ZivverAccountObject` and `Compare-Array`.
-
-The `Compare-ZivverAccountObject` is tailored to compare __only__ what is managed and is only used in the update script.
-
 #### Updating a Zivver user account
 
 Zivver only supports the `HTTP.PUT` method for updating user accounts, requiring the entire user object to be included in each call. If a partial `PUT` is used without the SsoAccountKey the SSO in Zivver will break.
@@ -192,13 +157,10 @@ The Zivver user response is used and enriched with the necessary updates. This i
 
 ##### When the division could not be found
 
-The account object in the `create` lifecycle action contains a property called `urn:ietf:params:scim:schemas:extension:enterprise:2.0:User.division`. In version `1.1.0` of the connector, this value is set to `p.PrimaryContract.Department.DisplayName`. If the department can't be found within Zivver, an error will be thrown (By Zivver). _Error: Invalid division: {name of division}_. As a result, the create lifecycle action will fail.
+The field mapping object `division` is mapped to a property called `urn:ietf:params:scim:schemas:extension:enterprise:2.0:User.division`. If the division can't be found within Zivver, an error will be thrown (By Zivver). _Error: Invalid division: {name of division}_. As a result, the create/update lifecycle action will fail.
 
-#### Creation / correlation process
-
-It is possible to update the account in the target system during the correlation process. By default, this behavior is disabled. Meaning, the account will only be created or correlated.
-
-You can change this behavior in the ``configuration`` by setting the checkbox ``UpdatePersonOnCorrelate`` to the value of ``true``.
+> [!TIP]
+> If you're not using division, map this field to the fixed value '/'. This is how Zivver returns an empty division so the Compare-Object keeps working in the script.
 
 ## Getting help
 
