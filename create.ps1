@@ -135,7 +135,6 @@ try {
 
     $headers = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
     $headers.Add("Authorization", "Bearer $($actionContext.Configuration.Token)")
-    Write-Verbose "Created authorization headers"
     #endregion Create authorization headers
 
     #region Get Zivver account
@@ -149,7 +148,7 @@ try {
 
     $correlatedAccount = (Invoke-ZivverRestMethod @getZivverSplatParams).Resources
         
-    Write-Verbose "Queried Ziver account where [$($correlationField)] = [$($correlationValue)]. Result: $($correlatedAccount | ConvertTo-Json)"
+    Write-Information "Queried Ziver account where [$($correlationField)] = [$($correlationValue)]. Result: $($correlatedAccount | ConvertTo-Json)"
     #endregion Get Zivver account
 
     #region Calulate action
@@ -177,8 +176,6 @@ try {
                 Method   = 'POST'
                 Body     = $account | ConvertTo-Json
             }
-
-            Write-Verbose "SplatParams: $($postZivverSplatParams | ConvertTo-Json)"
 
             if (-Not($actionContext.DryRun -eq $true)) {
                 $createdAccount = Invoke-ZivverRestMethod @postZivverSplatParams

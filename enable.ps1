@@ -100,7 +100,6 @@ try {
 
     $headers = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
     $headers.Add("Authorization", "Bearer $($actionContext.Configuration.Token)")
-    Write-Verbose "Created authorization headers"
     #endregion Create authorization headers
 
     #region Get Zivver account
@@ -123,7 +122,7 @@ try {
             throw
         }
     }
-    Write-Verbose "Queried Ziver account where [id] = [$($actionContext.References.Account)]. Result: $($correlatedAccount | ConvertTo-Json)"
+    Write-Information "Queried Ziver account where [id] = [$($actionContext.References.Account)]. Result: $($correlatedAccount | ConvertTo-Json)"
     #endregion Get Zivver account
 
     #region Calulate action
@@ -135,9 +134,6 @@ try {
         else {
             $actionAccount = "Enable"
         }  
-    }
-    elseif (($correlatedAccount | Measure-Object).count -gt 1) {
-        $actionAccount = "MultipleFound"
     }
     elseif (($correlatedAccount | Measure-Object).count -eq 0) {
         $actionAccount = "NotFound"
@@ -166,8 +162,6 @@ try {
                 Body     = $body | ConvertTo-Json
             }
 
-            Write-Verbose "SplatParams: $($putZivverSplatParams | ConvertTo-Json)"
-
             if (-Not($actionContext.DryRun -eq $true)) {
                 $null = Invoke-ZivverRestMethod @putZivverSplatParams
 
@@ -192,17 +186,6 @@ try {
                     IsError = $false
                 })
             #endregion No changes
-
-            break
-        }
-
-        "MultipleFound" {
-            #region Multiple accounts found
-            $actionMessage = "enabling account"
-
-            # Throw terminal error
-            throw "Multiple accounts found with AccountReference [$($actionContext.References.Account)]. Please correct this so the persons are unique."
-            #endregion Multiple accounts found
 
             break
         }

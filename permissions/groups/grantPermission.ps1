@@ -100,7 +100,6 @@ try {
 
     $headers = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
     $headers.Add("Authorization", "Bearer $($actionContext.Configuration.Token)")
-    Write-Verbose "Created authorization headers"
     #endregion Create authorization headers
 
     #region Get Zivver account
@@ -123,7 +122,7 @@ try {
             throw
         }
     }
-    Write-Verbose "Queried Ziver account where [id] = [$($actionContext.References.Account)]. Result: $($correlatedAccount | ConvertTo-Json)"
+    Write-Information "Queried Ziver account where [id] = [$($actionContext.References.Account)]. Result: $($correlatedAccount | ConvertTo-Json)"
     #endregion Get Zivver account
 
     #region Get Zivver group
@@ -147,7 +146,7 @@ try {
         }
     }
     $currentGroupMembers = $correlatedGroup.members
-    Write-Verbose "Queried Ziver group where [id] = [$($actionContext.References.Permission.Reference)]. Result: $($correlatedGroup | ConvertTo-Json)"
+    Write-Information "Queried Ziver group where [id] = [$($actionContext.References.Permission.Reference)]. Result: $($correlatedGroup | ConvertTo-Json)"
     #endregion Get Zivver group
 
     #region Calulate action
@@ -195,18 +194,16 @@ try {
 }
 "@
 
-            $putZivverSplatParams = @{
+            $patchZivverSplatParams = @{
                 Headers     = $headers
                 Endpoint    = "Groups/$($actionContext.References.Permission.Reference)"
                 Method      = 'PATCH'
                 ContentType = 'application/scim+json'
-                Body        = $body #| ConvertTo-Json
+                Body        = $body
             }
 
-            Write-Verbose "SplatParams: $($putZivverSplatParams | ConvertTo-Json)"
-
             if (-Not($actionContext.DryRun -eq $true)) {
-                $null = Invoke-ZivverRestMethod @putZivverSplatParams
+                $null = Invoke-ZivverRestMethod @patchZivverSplatParams
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
                         Message = "Permission with displayName [$($actionContext.References.Permission.DisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)] granted to account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."

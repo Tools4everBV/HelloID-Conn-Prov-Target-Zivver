@@ -91,7 +91,6 @@ try {
 
     $headers = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
     $headers.Add("Authorization", "Bearer $($actionContext.Configuration.Token)")
-    Write-Verbose "Created authorization headers"
     #endregion Create authorization headers
 
     #region Retrieving Zivver groups
