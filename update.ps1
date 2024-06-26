@@ -1,107 +1,49 @@
-########################################
+#################################################
 # HelloID-Conn-Prov-Target-Zivver-Update
-#
-# Version: 1.1.0
-########################################
-# Initialize default values
-$config = $configuration | ConvertFrom-Json
-$p = $person | ConvertFrom-Json
-$aRef = $AccountReference | ConvertFrom-Json
-$success = $false
-$auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
-
-#region support functions
-function Get-FullName {
-    Param (
-        [object]$person
-    )
-
-    if ([string]::IsNullOrEmpty($p.Name.Nickname)) { $calcFirstName = $p.Name.GivenName } else { $calcFirstName = $p.Name.Nickname }
-
-    $calcFullName = $calcFirstName + ' '
-
-    switch ($person.Name.Convention) {
-        'B' { 
-            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePrefix)) {
-                $calcFullName = $calcFullName + $person.Name.familyNamePrefix + ' '
-            }
-            $calcFullName = $calcFullName + $person.Name.FamilyName
-            break 
-        }
-        'P' { 
-            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePartnerPrefix)) {
-                $calcFullName = $calcFullName + $person.Name.familyNamePartnerPrefix + ' '
-            }
-            $calcFullName = $calcFullName + $person.Name.FamilyNamePartner
-            break 
-        }
-        'BP' { 
-            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePrefix)) {
-                $calcFullName = $calcFullName + $person.Name.familyNamePrefix + ' '
-            }
-            $calcFullName = $calcFullName + $person.Name.FamilyName + ' - '
-            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePartnerPrefix)) {
-                $calcFullName = $calcFullName + $person.Name.familyNamePartnerPrefix + ' '
-            }
-            $calcFullName = $calcFullName + $person.Name.FamilyNamePartner
-            break 
-        }
-        'PB' { 
-            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePartnerPrefix)) {
-                $calcFullName = $calcFullName + $person.Name.familyNamePartnerPrefix + ' '
-            }
-            $calcFullName = $calcFullName + $person.Name.FamilyNamePartner + ' - '
-            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePrefix)) {
-                $calcFullName = $calcFullName + $person.Name.familyNamePrefix + ' '
-            }
-            $calcFullName = $calcFullName + $person.Name.FamilyName
-            break 
-        }
-        Default {
-            if (-not [string]::IsNullOrEmpty($person.Name.familyNamePrefix)) {
-                $calcFullName = $calcFullName + $person.Name.familyNamePrefix + ' '
-            }
-            $calcFullName = $calcFullName + $person.Name.FamilyName
-            break 
-        }
-    } 
-    return $calcFullName
-}
-#endregion support functions
-
-# Account mapping
-# The account object within Zivver contains a few more properties. For example, [delegates].
-# These are not managed by HelloID and therefore, not listed in the account object.
-$account = [PSCustomObject]@{
-    name  = [PSCustomObject]@{
-        formatted = Get-FullName -person $p
-    }
-    # 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User' = [PSCustomObject]@{
-    #     division = $p.PrimaryContract.Department.DisplayName
-    # }
-    'urn:ietf:params:scim:schemas:zivver:0.1:User' = [PSCustomObject]@{
-        SsoAccountKey = $p.Accounts.MicrosoftActiveDirectory.UserPrincipalName
-        # aliases = @()
-    }
-    userName = $p.Accounts.MicrosoftActiveDirectory.UserPrincipalName 
-}
+# PowerShell V2
+#################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
 # Set debug logging
-switch ($($config.IsDebug)) {
+switch ($actionContext.Configuration.isDebug) {
     $true { $VerbosePreference = 'Continue' }
     $false { $VerbosePreference = 'SilentlyContinue' }
 }
 
+#region mapping
+# Change mapping here
+$account = [PSCustomObject]@{
+    schemas                                                      = @(
+        'urn:ietf:params:scim:schemas:core:2.0:User',
+        'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User',
+        'urn:ietf:params:scim:schemas:zivver:0.1:User'
+    )
+    name                                                         = [PSCustomObject]@{
+        formatted = $actionContext.Data.fullname
+    }
+    'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User' = [PSCustomObject]@{
+        division = $actionContext.Data.division # If the division can't be found within Zivver, an error will be thrown (By Zivver). Error: Invalid division: {name of division}
+    }
+    'urn:ietf:params:scim:schemas:zivver:0.1:User'               = [PSCustomObject]@{
+        SsoAccountKey = $actionContext.Data.ssoAccountKey
+        # aliases = @()
+    }
+    userName                                                     = $actionContext.Data.userName
+}
+#endregion mapping
+
 #region functions
 function Invoke-ZivverRestMethod {
+    [CmdletBinding()]
     param (
+        [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [string]
         $Method,
 
+        [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
         [string]
         $Endpoint,
@@ -112,33 +54,38 @@ function Invoke-ZivverRestMethod {
         [string]
         $ContentType = 'application/json',
 
+        [Parameter(Mandatory)]
         [System.Collections.IDictionary]
         $Headers
     )
 
-    try {
-        $splatParams = @{
-            Uri         = "$($config.BaseUrl)/api/scim/v2/$Endpoint"
-            Headers     = $Headers
-            Method      = $Method
-            ContentType = $ContentType
+    process {
+        try {
+            $splatParams = @{
+                Uri         = "$($actionContext.Configuration.BaseUrl)/api/scim/v2/$Endpoint"
+                Headers     = $Headers
+                Method      = $Method
+                ContentType = $ContentType
+            }
+    
+            if ($Body) {
+                Write-Verbose 'Adding body to request'
+                $utf8Encoding = [System.Text.Encoding]::UTF8
+                $encodedBody = $utf8Encoding.GetBytes($body)
+                $splatParams['Body'] = $encodedBody
+            }
+            Invoke-RestMethod @splatParams -Verbose:$false
         }
-
-        if ($Body) {
-            Write-Verbose 'Adding body to request'
-            $utf8Encoding = [System.Text.Encoding]::UTF8
-            $encodedBody = $utf8Encoding.GetBytes($body)
-            $splatParams['Body'] = $encodedBody
+        catch {
+            $PSCmdlet.ThrowTerminatingError($_)
         }
-        Invoke-RestMethod @splatParams -Verbose:$false
-    }
-    catch {
-        Throw $_
     }
 }
 
 function Resolve-ZivverError {
+    [CmdletBinding()]
     param (
+        [Parameter(Mandatory)]
         [object]
         $ErrorObject
     )
@@ -160,208 +107,222 @@ function Resolve-ZivverError {
         Write-Output $httpErrorObj
     }
 }
+#endregion functions
 
-function Compare-ZivverAccountObject {
-    param (
-        [object]
-        $ReferenceObject,
-
-        [object]
-        $DifferenceObject,
-
-        [array]
-        $ExcludeProperties = @()
-    )
-
-    $differences = @()
-
-    foreach ($key in $ReferenceObject | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name) {
-        if ($ExcludeProperties -contains $key) {
-            continue
-        }
-
-        $referenceValue = $ReferenceObject.$key
-        $differenceValue = $DifferenceObject.$key
-
-        if ($referenceValue -is [PSCustomObject] -and $differenceValue -is [PSCustomObject]) {
-            $nestedDifferences = Compare-ZivverAccountObject -ReferenceObject $referenceValue -DifferenceObject $differenceValue -ExcludeProperties $ExcludeProperties
-            if ($nestedDifferences) {
-                $differences += $key
-                $differences += $nestedDifferences
-            }
-        }
-        elseif ($referenceValue -is [Array] -and $differenceValue -is [Array]) {
-            if (-not (Compare-Array $referenceValue $differenceValue)) {
-                $differences += $key
-                if ($key -eq "urn:ietf:params:scim:schemas:zivver:0.1:User") {
-                    $array1 = $referenceValue -join ","
-                    $array2 = $differenceValue -join ","
-                    $differences += "Array1: $array1"
-                    $differences += "Array2: $array2"
-                }
-            }
-        }
-        elseif ($referenceValue -ne $differenceValue) {
-            $differences += $key
-        }
-    }
-
-    Write-Output $differences
-}
-
-function Compare-Array {
-    param (
-        [object]
-        $ReferenceObject,
-
-        [object]
-        $DifferenceObject
-    )
-
-    if ($ReferenceObject.Length -ne $DifferenceObject.Length) {
-        return $false
-    }
-
-    $sortedArr1 = $ReferenceObject | Sort-Object
-    $sortedArr2 = $DifferenceObject | Sort-Object
-
-    for ($i = 0; $i -lt $sortedArr1.Length; $i++) {
-        if ($sortedArr1[$i] -ne $sortedArr2[$i]) {
-            return $false
-        }
-    }
-
-    return $true
-}
-#endregion
-
-# Begin
 try {
-    Write-Verbose "Verify if [$aRef] has a value"
-    if ([string]::IsNullOrEmpty($($aRef))) {
-        throw 'Mandatory attribute [aRef] is empty.'
+    #region Verify account reference
+    $actionMessage = "verifying account reference"
+    if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
+        throw "The account reference could not be found"
     }
+    #endregion Verify account reference
 
-    Write-Verbose 'Creating authorization header'
+    #region Create authorization headers
+    $actionMessage = "creating authorization headers"
+
     $headers = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
-    $headers.Add("Authorization", "Bearer $($config.Token)")
-    $splatParams = @{
-        Headers = $headers
-    }
+    $headers.Add("Authorization", "Bearer $($actionContext.Configuration.Token)")
+    #endregion Create authorization headers
 
+    #region Get Zivver account
+    $actionMessage = "querying Zivver account"
+
+    $getZivverSplatParams = @{
+        Headers  = $headers
+        Endpoint = "Users/$($actionContext.References.Account)"
+        Method   = 'GET'
+    }
     try {
-        Write-Verbose "Verifying if a Zivver account for [$($p.DisplayName)] exists"
-        $splatParams['Endpoint'] = "Users/$aRef"
-        $splatParams['Method'] = 'GET'
-        $responseUser = Invoke-ZivverRestMethod @splatParams
+        $correlatedAccount = Invoke-ZivverRestMethod @getZivverSplatParams
     }
     catch {
         # A '400'bad request is returned if the entity cannot be found
         if ($_.Exception.Response.StatusCode -eq 400) {
-            $responseUser = $null
+            $correlatedAccount = $null
         }
         else {
             throw
         }
     }
+    $outputPreviousData = $correlatedAccount.PsObject.Copy()
+    Write-Information "Queried Ziver account where [id] = [$($actionContext.References.Account)]. Result: $($correlatedAccount | ConvertTo-Json)"
+    #endregion Get Zivver account
 
-    if ($responseUser.Length -lt 1) {
-        throw "Zivver account for: [$($p.DisplayName)] not found. Possibly deleted"
-    }
+    #region Calulate action
+    $actionMessage = "calculating action"
+    if (($correlatedAccount | Measure-Object).count -eq 1) {
+        $actionMessage = "comparing current account to mapped properties"
 
-    Write-Verbose "Verify if Zivver account for [$($p.DisplayName)] must be updated"
-    $splatCompareProperties = @{
-        ReferenceObject   = @($responseUser)
-        DifferenceObject  = @($account)
-        ExcludeProperties = @("delegates", "id", "meta", "active", "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User", "urn:ietf:params:scim:schemas:zivver:0.1:User", "schemas") # Properties not managed by HelloID, are excluded from the comparison.
-    }
-    $propertiesChanged = Compare-ZivverAccountObject @splatCompareProperties
+        # Change mapping here
 
-    if ($propertiesChanged) {
-        # Create the JSON body for the properties to update
-
-        if ($account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.PSObject.Properties.Name -contains 'SsoAccountKey') {
-            $responseUser.'urn:ietf:params:scim:schemas:zivver:0.1:User' | Add-Member -MemberType NoteProperty -Name "SsoAccountKey" -Value $account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.SsoAccountKey -Force
+        # Define your mapping here for correlatedaccount data to compare
+        $correlatedReferenceObject = [PSCustomObject]@{
+            fullname = $correlatedAccount.name.formatted
+            division = $correlatedAccount.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.division
+            userName = $correlatedAccount.userName
         }
 
-        $responseUser.name.formatted = $account.name.formatted
-
-        if ($account.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.PSObject.Properties.Name -contains 'division') {
-            $responseUser.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.division = $account.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.division
+        # Define your mapping here for fieldmapping data to compare
+        $accountDifferenceObject = [PSCustomObject]@{
+            fullname = $account.name.formatted
+            division = $account.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.division
+            userName = $account.userName
         }
 
-        if ($account.PSObject.Properties.Name -contains 'userName') {
-            $responseUser.userName = $account.userName
+        $splatCompareProperties = @{
+            ReferenceObject  = @($correlatedReferenceObject.PSObject.Properties)
+            DifferenceObject = @($accountDifferenceObject.PSObject.Properties)
+        }  
+        $accountPropertiesChanged = Compare-Object @splatCompareProperties -PassThru
+        $accountOldProperties = $accountPropertiesChanged | Where-Object { $_.SideIndicator -eq "<=" }
+        $accountNewProperties = $accountPropertiesChanged | Where-Object { $_.SideIndicator -eq "=>" }
+
+        if ($accountNewProperties) {
+            $actionAccount = "Update"
+            Write-Information "Account property(s) required to update: $($accountNewProperties.Name -join ', ')"
         }
-
-        $action = 'Update'
-        $dryRunMessage = "Update Zivver account for: [$($p.DisplayName)], will be executed during enforcement. Account property(s) required to update: [$($propertiesChanged -join ", ")]"
+        else {
+            $actionAccount = "NoChanges"
+        }    
     }
-    else {
-        $action = 'NoChanges'
-        $dryRunMessage = 'No changes will be made to the account during enforcement'
+    elseif (($correlatedAccount | Measure-Object).count -eq 0) {
+        $actionAccount = "NotFound"
     }
+    #endregion Calulate action
 
-    # Add an auditMessage showing what will happen during enforcement
-    if ($dryRun -eq $true) {
-        Write-Warning "[DryRun] $dryRunMessage"
-    }
+    #region Process
+    switch ($actionAccount) {
+        "Update" {
+            #region Update account
+            $actionMessage = "updating account"
 
-    # Process
-    if (-not($dryRun -eq $true)) {
-        switch ($action) {
-            'Update' {
-                Write-Verbose "Updating Zivver account with accountReference: [$aRef]"
-                $splatParams['Endpoint'] = "Users/$aRef"
-                $splatParams['Method'] = 'PUT'
-                $splatParams['Body'] = $responseUser | ConvertTo-Json
-                $null = Invoke-ZivverRestMethod @splatParams
-
-                $success = $true
-                $auditLogs.Add([PSCustomObject]@{
-                        Message = 'Update account was successful'
-                        IsError = $false
-                    })
-                break
+            # Create custom object with old and new values (for logging)
+            $accountChangedPropertiesObject = [PSCustomObject]@{
+                OldValues = @{}
+                NewValues = @{}
             }
 
-            'NoChanges' {
-                Write-Verbose "No changes to Zivver account with accountReference: [$aRef]"
+            foreach ($accountOldProperty in ($accountOldProperties | Where-Object { $_.Name -in $accountNewProperties.Name })) {
+                $accountChangedPropertiesObject.OldValues.$($accountOldProperty.Name) = $accountOldProperty.Value
+            }
 
-                $success = $true
-                $auditLogs.Add([PSCustomObject]@{
-                        Message = "No changes to Zivver account with accountReference: [$aRef]"
+            foreach ($accountNewProperty in $accountNewProperties) {
+                $accountChangedPropertiesObject.NewValues.$($accountNewProperty.Name) = $accountNewProperty.Value
+            }
+
+            # Change mapping here
+            $correlatedAccount.name.formatted = $account.name.formatted
+
+            if ($account.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.PSObject.Properties.Name -contains 'division') {
+                $correlatedAccount.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.division = $account.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.division
+            }
+
+            if ($account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.PSObject.Properties.Name -contains 'SsoAccountKey') {
+                $correlatedAccount.'urn:ietf:params:scim:schemas:zivver:0.1:User' | Add-Member -MemberType NoteProperty -Name "SsoAccountKey" -Value $account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.SsoAccountKey -Force
+            }
+
+            if ($account.PSObject.Properties.Name -contains 'userName') {
+                $correlatedAccount.userName = $account.userName
+            }
+
+            $putZivverSplatParams = @{
+                Headers  = $headers
+                Endpoint = "Users/$($actionContext.References.Account)"
+                Method   = 'PUT'
+                Body     = $correlatedAccount | ConvertTo-Json
+            }
+
+            if (-Not($actionContext.DryRun -eq $true)) {
+                $updatedAccount = Invoke-ZivverRestMethod @putZivverSplatParams
+
+                $outputContext.AccountReference = $updatedAccount.id
+                $outputData = $updatedAccount
+
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                        Message = "Account with userName [$($updatedAccount.userName)] and AccountReference [$($outputContext.AccountReference)] updated. Old values: $($accountChangedPropertiesObject.oldValues | ConvertTo-Json). New values: $($accountChangedPropertiesObject.newValues | ConvertTo-Json)"
                         IsError = $false
                     })
-                break
             }
+            else {
+                Write-Warning "DryRun: Would update account with userName [$($correlatedAccount.userName)] and AccountReference [$($outputContext.AccountReference)]. Old values: $($accountChangedPropertiesObject.oldValues | ConvertTo-Json). New values: $($accountChangedPropertiesObject.newValues | ConvertTo-Json)"
+            }
+
+            break
+        }
+
+        "NoChanges" {
+            #region No changes
+            $actionMessage = "skipping updating account"
+
+            $outputData = $correlatedAccount
+
+            Write-Information "Account with userName [$($correlatedAccount.userName)] and AccountReference: [$($actionContext.References.Account)] not updated. Reason: No changes."
+            #endregion No changes
+
+            break
+        }
+
+        "NotFound" {
+            #region No account found
+            $actionMessage = "updating account"
+        
+            # Throw terminal error
+            throw "Account with AccountReference [$($actionContext.References.Account)] not found. Possibly indicating that it could be deleted, or not correlated."
+            #endregion No account found
+
+            break
         }
     }
+    #endregion Process
 }
 catch {
-    $success = $false
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-ZivverError -ErrorObject $ex
-        $auditMessage = "Could not update Zivver account. Error: $($errorObj.FriendlyMessage)"
+        $auditMessage = "Error $($actionMessage). Error: $($errorObj.FriendlyMessage)"
         Write-Verbose "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     }
     else {
-        $auditMessage = "Could not update Zivver account. Error: $($ex.Exception.Message)"
+        $auditMessage = "Error $($actionMessage). Error: $($ex.Exception.Message)"
         Write-Verbose "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
-    $auditLogs.Add([PSCustomObject]@{
+    $outputContext.AuditLogs.Add([PSCustomObject]@{
             Message = $auditMessage
             IsError = $true
         })
-    # End
 }
 finally {
-    $result = [PSCustomObject]@{
-        Success   = $success
-        Account   = $account
-        Auditlogs = $auditLogs
+    # Check if auditLogs contains errors, if no errors are found, set success to true
+    if ($outputContext.AuditLogs.IsError -contains $true) {
+        $outputContext.Success = $false
     }
-    Write-Output $result | ConvertTo-Json -Depth 10
+    else {
+        $outputContext.Success = $true
+
+        # Change mapping here
+        # Define your mapping here for returning the correct data to HelloID
+        $outputDataObject = [PSCustomObject]@{
+            id            = $outputData.id
+            active        = [string]$outputData.active # value is returned as boleaan
+            fullname      = $outputData.name.formatted
+            division      = $outputData.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.division
+            ssoAccountKey = $account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.ssoAccountKey # ssoAccountKey is not returned by Zivver, account is mapped to make sure the same value is returned
+            userName      = $outputData.userName
+        }
+        Write-Verbose "output data to HelloID: [$($outputDataObject | Convertto-json)]"
+        $outputContext.Data = $outputDataObject
+
+        # Define your mapping here for returning the correct previous data to HelloID
+        $outputPreviousDataObject = [PSCustomObject]@{
+            id            = $outputPreviousData.id
+            active        = [string]$outputPreviousData.active # value is returned as boleaan
+            fullname      = $outputPreviousData.name.formatted
+            division      = $outputPreviousData.'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'.division
+            ssoAccountKey = $account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.ssoAccountKey # ssoAccountKey is not returned by Zivver, account is mapped to make sure the same value is returned
+            userName      = $outputPreviousData.userName
+        }
+        Write-Verbose "output previous data to HelloID: [$($outputPreviousDataObject | Convertto-json)]"
+        $outputContext.PreviousData = $outputPreviousDataObject
+    }
 }

@@ -1,7 +1,7 @@
-##################################################
-# HelloID-Conn-Prov-Target-Zivver-Delete
+################################################################
+# HelloID-Conn-Prov-Target-Zivver-GrantPermission-Group
 # PowerShell V2
-##################################################
+################################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
@@ -125,15 +125,42 @@ try {
     Write-Information "Queried Ziver account where [id] = [$($actionContext.References.Account)]. Result: $($correlatedAccount | ConvertTo-Json)"
     #endregion Get Zivver account
 
+    #region Get Zivver group
+    $actionMessage = "querying Zivver group"
+
+    $getZivverGroupSplatParams = @{
+        Headers  = $headers
+        Endpoint = "Groups/$($actionContext.References.Permission.Reference)"
+        Method   = 'GET'
+    }
+    try {
+        $correlatedGroup = Invoke-ZivverRestMethod @getZivverGroupSplatParams
+    }
+    catch {
+        # A '400'bad request is returned if the entity cannot be found
+        if ($_.Exception.Response.StatusCode -eq 400) {
+            $correlatedGroup = $null
+        }
+        else {
+            throw
+        }
+    }
+    $currentGroupMembers = $correlatedGroup.members
+    Write-Information "Queried Ziver group where [id] = [$($actionContext.References.Permission.Reference)]. Result: $($correlatedGroup | ConvertTo-Json)"
+    #endregion Get Zivver group
+
     #region Calulate action
     $actionMessage = "calculating action"
     if (($correlatedAccount | Measure-Object).count -eq 1) {
-        if ([string]$correlatedAccount.active -eq $actionContext.Data.active) {
-            $actionAccount = "NoChanges"
+        if ($currentGroupMembers.value -contains $actionContext.References.Account) {
+            $actionAccount = 'NoChanges'
         }
         else {
-            $actionAccount = "Disable"
-        } 
+            $actionAccount = "GrantPermission"   
+        }
+    }
+    elseif (($correlatedAccount | Measure-Object).count -gt 1) {
+        $actionAccount = "MultipleFound"
     }
     elseif (($correlatedAccount | Measure-Object).count -eq 0) {
         $actionAccount = "NotFound"
@@ -142,63 +169,86 @@ try {
 
     #region Process
     switch ($actionAccount) {
-        "Disable" {
-            #region Update account
-            $actionMessage = "disabling account"
+        "GrantPermission" {
+            #region grant permission
+            $actionMessage = "granting permission"
 
-            $body = @{
-                "schemas" = @(
-                    "urn:ietf:params:scim:schemas:core:2.0:User",
-                    "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User",
-                    "urn:ietf:params:scim:schemas:zivver:0.1:User"
-                )
-                "active"  = $actionContext.Data.active
-            }
+            $memberToAdd = @{value = $actionContext.References.Account }
+            $currentMembers += $memberToAdd
+            [array]$updatedMembers = $currentMembers
 
-            $putZivverSplatParams = @{
-                Headers  = $headers
-                Endpoint = "Users/$($actionContext.References.Account)"
-                Method   = 'PUT'
-                Body     = $body | ConvertTo-Json
+            # Force object to an Array also if PS object only has one value.
+            $updatedMembersJSON = ConvertTo-Json -InputObject @($updatedMembers)
+            $body = @"
+        {
+    "schemas": [
+        "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+    ],
+    "Operations": [
+        {
+            "value": $updatedMembersJSON,
+            "path": "members",
+            "op": "replace"
+        }
+    ]
+}
+"@
+
+            $patchZivverSplatParams = @{
+                Headers     = $headers
+                Endpoint    = "Groups/$($actionContext.References.Permission.Reference)"
+                Method      = 'PATCH'
+                ContentType = 'application/scim+json'
+                Body        = $body
             }
 
             if (-Not($actionContext.DryRun -eq $true)) {
-                $null = Invoke-ZivverRestMethod @putZivverSplatParams
+                $null = Invoke-ZivverRestMethod @patchZivverSplatParams
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)] disabled."
+                        Message = "Permission with displayName [$($actionContext.References.Permission.DisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)] granted to account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
                         IsError = $false
                     })
             }
             else {
-                Write-Warning "DryRun: Would disable account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json)."
+                Write-Warning "DryRun: Would grant permission with displayName [$($actionContext.References.Permission.DisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)] to account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
             }
+            #endregion grant permission
 
             break
         }
 
-        "NoChanges" {
-            #region No changes
-            $actionMessage = "disabling account"
+        'NoChanges' {
+            #region NoChanges to group
+            $actionMessage = "granting permission"
 
             $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = "Account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)] is already disabled."
+                    Message = "Permission with displayName [$($actionContext.References.Permission.DisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)] already granted to account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
                     IsError = $false
                 })
-            #endregion No changes
+            #endregion NoChanges to group
+
+            break
+        }
+
+
+        "MultipleFound" {
+            #region Multiple accounts found
+            $actionMessage = "granting permission"
+
+            # Throw terminal error
+            throw "Multiple accounts found with AccountReference [$($actionContext.References.Account)]. Please correct this so the persons are unique."
+            #endregion Multiple accounts found
 
             break
         }
 
         "NotFound" {
             #region No account found
-            $actionMessage = "disabling account"
+            $actionMessage = "granting permission"
         
-            # If account is not found on delete the action is skipped
-            $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = "Account with AccountReference [$($actionContext.References.Account)] not found (skipped action). Possibly indicating that it could be deleted, or not correlated."
-                    IsError = $false
-                })
+            # Throw terminal error
+            throw "Account with AccountReference [$($actionContext.References.Account)] not found. Possibly indicating that it could be deleted, or not correlated."
             #endregion No account found
 
             break
@@ -230,20 +280,5 @@ finally {
     }
     else {
         $outputContext.Success = $true
-
-        # Change mapping here
-        # Define your mapping here for returning the correct data to HelloID
-        $outputDataObject = [PSCustomObject]@{
-            active = [string]$actionContext.Data.active # value is returned as boleaan
-        }
-        Write-Verbose "output data to HelloID: [$($outputDataObject | Convertto-json)]"
-        $outputContext.Data = $outputDataObject
-                        
-        # Define your mapping here for returning the correct previous data to HelloID
-        $outputPreviousDataObject = [PSCustomObject]@{
-            active = [string]$correlatedAccount.active # value is returned as boleaan
-        }
-        Write-Verbose "output previous data to HelloID: [$($outputPreviousDataObject | Convertto-json)]"
-        $outputContext.PreviousData = $outputPreviousDataObject
     }
 }

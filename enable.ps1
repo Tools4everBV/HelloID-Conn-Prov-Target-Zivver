@@ -1,7 +1,7 @@
-##################################################
-# HelloID-Conn-Prov-Target-Zivver-Delete
+#################################################
+# HelloID-Conn-Prov-Target-Zivver-Enable
 # PowerShell V2
-##################################################
+#################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
@@ -132,8 +132,8 @@ try {
             $actionAccount = "NoChanges"
         }
         else {
-            $actionAccount = "Disable"
-        } 
+            $actionAccount = "Enable"
+        }  
     }
     elseif (($correlatedAccount | Measure-Object).count -eq 0) {
         $actionAccount = "NotFound"
@@ -142,9 +142,9 @@ try {
 
     #region Process
     switch ($actionAccount) {
-        "Disable" {
+        "Enable" {
             #region Update account
-            $actionMessage = "disabling account"
+            $actionMessage = "enabling account"
 
             $body = @{
                 "schemas" = @(
@@ -166,23 +166,23 @@ try {
                 $null = Invoke-ZivverRestMethod @putZivverSplatParams
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)] disabled."
+                        Message = "Account with userName [$($correlatedAccount.userName)] and AccountReference: [$($actionContext.References.Account)] enabled."
                         IsError = $false
                     })
             }
             else {
-                Write-Warning "DryRun: Would disable account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json)."
+                Write-Warning "DryRun: Would enable account with AccountReference [$($actionContext.References.Account)]."
             }
 
             break
         }
-
+        
         "NoChanges" {
             #region No changes
-            $actionMessage = "disabling account"
+            $actionMessage = "enabling account"
 
             $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = "Account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)] is already disabled."
+                    Message = "Account with userName [$($correlatedAccount.userName)] and AccountReference: [$($actionContext.References.Account)]  is already enabled."
                     IsError = $false
                 })
             #endregion No changes
@@ -192,13 +192,10 @@ try {
 
         "NotFound" {
             #region No account found
-            $actionMessage = "disabling account"
+            $actionMessage = "enabling account"
         
-            # If account is not found on delete the action is skipped
-            $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = "Account with AccountReference [$($actionContext.References.Account)] not found (skipped action). Possibly indicating that it could be deleted, or not correlated."
-                    IsError = $false
-                })
+            # Throw terminal error
+            throw "Account with AccountReference [$($actionContext.References.Account)] not found. Possibly indicating that it could be deleted, or not correlated."
             #endregion No account found
 
             break
@@ -238,7 +235,7 @@ finally {
         }
         Write-Verbose "output data to HelloID: [$($outputDataObject | Convertto-json)]"
         $outputContext.Data = $outputDataObject
-                        
+        
         # Define your mapping here for returning the correct previous data to HelloID
         $outputPreviousDataObject = [PSCustomObject]@{
             active = [string]$correlatedAccount.active # value is returned as boleaan

@@ -1,5 +1,5 @@
 ##################################################
-# HelloID-Conn-Prov-Target-Zivver-Delete
+# HelloID-Conn-Prov-Target-Zivver-Disable
 # PowerShell V2
 ##################################################
 
@@ -171,7 +171,7 @@ try {
                     })
             }
             else {
-                Write-Warning "DryRun: Would disable account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json)."
+                Write-Warning "DryRun: Would disable account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
             }
 
             break
@@ -238,7 +238,7 @@ finally {
         }
         Write-Verbose "output data to HelloID: [$($outputDataObject | Convertto-json)]"
         $outputContext.Data = $outputDataObject
-                        
+                
         # Define your mapping here for returning the correct previous data to HelloID
         $outputPreviousDataObject = [PSCustomObject]@{
             active = [string]$correlatedAccount.active # value is returned as boleaan
