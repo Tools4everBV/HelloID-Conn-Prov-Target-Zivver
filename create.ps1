@@ -126,7 +126,7 @@ try {
         }
     }
     else {
-        throw "Configuration of correlation is madatory."
+        throw "Configuration of correlation is mandatory."
     }
     #endregion Verify correlation configuration and properties
     
