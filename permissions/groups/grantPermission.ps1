@@ -206,12 +206,12 @@ try {
                 $null = Invoke-ZivverRestMethod @patchZivverSplatParams
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Permission with displayName [$($actionContext.References.Permission.DisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)] granted to account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
+                        Message = "Permission with displayName [$($actionContext.PermissionDisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)] granted to account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
                         IsError = $false
                     })
             }
             else {
-                Write-Warning "DryRun: Would grant permission with displayName [$($actionContext.References.Permission.DisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)] to account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
+                Write-Warning "DryRun: Would grant permission with displayName [$($actionContext.PermissionDisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)] to account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
             }
             #endregion grant permission
 
@@ -223,7 +223,7 @@ try {
             $actionMessage = "granting permission"
 
             $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = "Permission with displayName [$($actionContext.References.Permission.DisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)] already granted to account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
+                    Message = "Permission with displayName [$($actionContext.PermissionDisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)] already granted to account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
                     IsError = $false
                 })
             #endregion NoChanges to group

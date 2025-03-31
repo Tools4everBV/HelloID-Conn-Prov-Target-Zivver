@@ -218,12 +218,12 @@ try {
                 $null = Invoke-ZivverRestMethod @patchZivverSplatParams
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Permission with displayName [$($actionContext.References.Permission.DisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)] revoked from account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
+                        Message = "Permission with displayName [$($actionContext.PermissionDisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)] revoked from account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
                         IsError = $false
                     })
             }
             else {
-                Write-Warning "DryRun: Would revoke permission with displayName [$($actionContext.References.Permission.DisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)] from account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
+                Write-Warning "DryRun: Would revoke permission with displayName [$($actionContext.PermissionDisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)] from account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
             }
             #endregion grant permission
 
@@ -235,7 +235,7 @@ try {
             $actionMessage = "revoking permission"
 
             $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = "Permission with displayName [$($actionContext.References.Permission.DisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)] already revoked from account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
+                    Message = "Permission with displayName [$($actionContext.PermissionDisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)] already revoked from account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
                     IsError = $false
                 })
             #endregion NoChanges to group
@@ -249,7 +249,7 @@ try {
         
             # If account is not found on delete the action is skipped
             $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = "Account with AccountReference [$($actionContext.References.Account)] not found (skipped action for revoking Permission with displayName [$($actionContext.References.Permission.DisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)]). Possibly indicating that it could be deleted, or not correlated."
+                    Message = "Account with AccountReference [$($actionContext.References.Account)] not found (skipped action for revoking Permission with displayName [$($actionContext.PermissionDisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)]). Possibly indicating that it could be deleted, or not correlated."
                     IsError = $false
                 })
             #endregion No account found
