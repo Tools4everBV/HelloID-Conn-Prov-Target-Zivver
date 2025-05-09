@@ -114,6 +114,7 @@ try {
                 DisplayName    = $permission.displayName
                 Identification = @{
                     Reference   = $permission.id
+                    DisplayName = $permission.displayName
                 }
             }
         )

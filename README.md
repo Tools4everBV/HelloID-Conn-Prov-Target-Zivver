@@ -13,7 +13,6 @@
   - [Table of contents](#table-of-contents)
   - [Introduction](#introduction)
     - [SCIM based API](#scim-based-api)
-    - [Available lifecycle actions](#available-lifecycle-actions)
   - [Getting started](#getting-started)
     - [Functional description](#functional-description)
     - [Connection settings](#connection-settings)
@@ -29,6 +28,14 @@
   - [HelloID docs](#helloid-docs)
 
 ## Introduction
+Supported features:
+| Feature                             | Supported | Actions                                                  | Remarks |
+| ----------------------------------- | --------- | -------------------------------------------------------- | ------- |
+| **Account Lifecycle**               | ✅         | Create, Update, Enable, Disable, Delete (also a disable) |         |
+| **Permissions**                     | ✅         | Retrieve, Grant, Revoke groups                           |         |
+| **Resources**                       | ❌         | -                                                        |         |
+| **Entitlement Import: Accounts**    | ✅         | -                                                        |         |
+| **Entitlement Import: Permissions** | ❌         | -                                                        |         |
 
 _HelloID-Conn-Prov-Target-Zivver_ is a _target_ connector. Zivver provides secure communication solutions, primarily focused on email and file transfer. It offers a platform designed to protect sensitive information, such as personal data or confidential business data, from unauthorized access and interception.
 
@@ -45,23 +52,6 @@ The HelloID connector uses the API endpoints listed in the table below.
 
 > [!TIP]
 > _For more information on the Zivver API, please refer to the [Zivver website](https://docs.zivver.com/en/admin/integrations/scim-v2.html)_.
-
-### Available lifecycle actions
-
-The following lifecycle events are available:
-
-| Event                | Description                                                           |
-| -------------------- | --------------------------------------------------------------------- |
-| create.ps1           | Create (or update) and correlate an account. Also, enable the account |
-| enable.ps1           | Enable the account                                                    |
-| update.ps1           | Update the account                                                    |
-| disable.ps1          | Disable the account                                                   |
-| delete.ps1           | Only disables the account. Deleting an account is not supported       |
-| grantPermission.ps1  | Grants permission to the account                                      |
-| revokePermission.ps1 | Revokes permission from the account                                   |
-| entitlements.ps1     | Retrieves all entitlements                                            |
-| configuration.json   | Default _configuration.json_                                          |
-| fieldMapping.json    | Default _fieldMapping.json_                                           |
 
 ## Getting started
 
