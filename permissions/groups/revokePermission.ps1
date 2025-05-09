@@ -223,7 +223,7 @@ try {
                     })
             }
             else {
-                Write-Warning "DryRun: Would revoke permission with displayName [$($actionContext.PermissionDisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)] from account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
+                Write-Warning "DryRun: Would revoke permission [$($actionContext.References.Permission.Reference)] from account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
             }
             #endregion grant permission
 

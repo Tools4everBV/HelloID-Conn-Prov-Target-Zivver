@@ -71,7 +71,7 @@ try {
         
         $permission = @{
             PermissionReference = @{
-                Id = $zivverGroup.id
+                Reference = $zivverGroup.id
             }       
             DisplayName         = $displayName
         }

@@ -211,7 +211,7 @@ try {
                     })
             }
             else {
-                Write-Warning "DryRun: Would grant permission with displayName [$($actionContext.PermissionDisplayName)] and PermissionReference [$($actionContext.References.Permission.Reference)] to account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
+                Write-Warning "DryRun: Would grant permission [$($actionContext.References.Permission.Reference)] to account with userName [$($correlatedAccount.userName)] and AccountReference [$($actionContext.References.Account)]."
             }
             #endregion grant permission
 
