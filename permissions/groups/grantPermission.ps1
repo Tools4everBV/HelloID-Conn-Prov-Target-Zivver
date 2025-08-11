@@ -174,8 +174,8 @@ try {
             $actionMessage = "granting permission"
 
             $memberToAdd = @{value = $actionContext.References.Account }
-            $currentMembers += $memberToAdd
-            [array]$updatedMembers = $currentMembers
+            $currentGroupMembers += $memberToAdd
+            [array]$updatedMembers = $currentGroupMembers
 
             # Force object to an Array also if PS object only has one value.
             $updatedMembersJSON = ConvertTo-Json -InputObject @($updatedMembers)
