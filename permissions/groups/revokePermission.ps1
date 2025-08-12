@@ -170,7 +170,7 @@ try {
             #region grant permission
             $actionMessage = "revoking permission"
 
-            [array]$updatedMembers = $currentMembers | Where-Object { $_.value -ne $aRef }
+            [array]$updatedMembers = $currentGroupMembers | Where-Object { $_.value -ne $aRef }
 
             if ($updatedMembers.Count -eq 0) {
                 $body = @"
