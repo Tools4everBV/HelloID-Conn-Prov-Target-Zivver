@@ -147,12 +147,15 @@ try {
             $actionMessage = "enabling account"
 
             $body = @{
-                "schemas" = @(
-                    "urn:ietf:params:scim:schemas:core:2.0:User",
-                    "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User",
-                    "urn:ietf:params:scim:schemas:zivver:0.1:User"
+                schemas                                                      = @(
+                    'urn:ietf:params:scim:schemas:core:2.0:User',
+                    'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User',
+                    'urn:ietf:params:scim:schemas:zivver:0.1:User'
                 )
-                "active"  = $actionContext.Data.active
+                active  = $actionContext.Data.active
+                    name  = [PSCustomObject]@{
+                        formatted = $actionContext.Data.fullname
+                }
             }
 
             $putZivverSplatParams = @{

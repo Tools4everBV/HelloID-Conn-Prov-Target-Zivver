@@ -36,6 +36,7 @@ Supported features:
 | **Resources**                       | ❌         | -                                                        |         |
 | **Entitlement Import: Accounts**    | ✅         | -                                                        |         |
 | **Entitlement Import: Permissions** | ❌         | -                                                        |         |
+| **Governance Reconciliation Resolutions** | ✅        | Delete                                                        | Delete is treated as a disable action with the option to update values. Please adjust the configuration accordingly in the delete script |
 
 _HelloID-Conn-Prov-Target-Zivver_ is a _target_ connector. Zivver provides secure communication solutions, primarily focused on email and file transfer. It offers a platform designed to protect sensitive information, such as personal data or confidential business data, from unauthorized access and interception.
 
