@@ -144,6 +144,10 @@ Zivver only supports the `HTTP.PUT` method for updating user accounts, requiring
 
 The Zivver user response is used and enriched with the necessary updates. This is how we ensure the entire user `GET` response is included in each `PUT` call.
 
+#### Governance remarks
+
+To ensure that accounts are actually deleted in Zivver, the option must be enabled in Zivver to automatically delete accounts after, for example, 90 days. This is because the HelloID delete action doesn't actually delete the account. The full name is appended to the delete action (Deleted by HelloID).
+
 #### Error handling
 
 ##### When the division could not be found
