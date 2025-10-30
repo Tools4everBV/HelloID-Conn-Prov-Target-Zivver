@@ -126,13 +126,13 @@ try {
     #endregion Get Zivver account
 
     # Example reconciliation add data object
-    #     if ($actionContext.Origin -eq 'reconciliation') {
-    #     $data = [pscustomobject]@{ 
-    #         active = $false
-    #         fullname = $correlatedAccount.name.formatted + " (Deleted by HelloID)"
-    #     }
-    #     $actionContext | Add-Member -MemberType NoteProperty -Name 'data' -Value $data -Force
-    # }
+    if ($actionContext.Origin -eq 'reconciliation') {
+        $data = [pscustomobject]@{ 
+            active   = $false
+            fullname = $correlatedAccount.name.formatted + " (Deleted by HelloID)"
+        }
+        $actionContext | Add-Member -MemberType NoteProperty -Name 'data' -Value $data -Force
+    }
 
     #region Calulate action
     $actionMessage = "calculating action"
@@ -156,16 +156,15 @@ try {
             $actionMessage = "disabling account"
 
             $body = @{
-                schemas                                                      = @(
+                schemas = @(
                     'urn:ietf:params:scim:schemas:core:2.0:User',
                     'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User',
                     'urn:ietf:params:scim:schemas:zivver:0.1:User'
                 )
                 active  = $actionContext.Data.active
-                #example reconciliation update fullname deleted by HelloID
-                #    name  = [PSCustomObject]@{
-                #        formatted = $actionContext.Data.fullname + " (Deleted by HelloID)"
-                #}
+                name    = [PSCustomObject]@{
+                    formatted = $actionContext.Data.fullname
+                }
             }
 
             $putZivverSplatParams = @{

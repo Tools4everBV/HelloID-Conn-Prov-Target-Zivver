@@ -153,9 +153,6 @@ try {
                     'urn:ietf:params:scim:schemas:zivver:0.1:User'
                 )
                 active  = $actionContext.Data.active
-                    name  = [PSCustomObject]@{
-                        formatted = $actionContext.Data.fullname
-                }
             }
 
             $putZivverSplatParams = @{

@@ -29,7 +29,7 @@ try {
     $existingAccounts  | Add-Member -MemberType NoteProperty -Name 'fullname' -Value $null
 
     # Example how to filter out users that are deleted by HelloID (Reconciliation)
-    # $existingAccounts = $existingAccounts | Where-Object { $_.name.formatted -notlike "*(Deleted by HelloID)" } 
+    $existingAccounts = $existingAccounts | Where-Object { $_.name.formatted -notlike "*(Deleted by HelloID)" } 
 
     # Map the imported data to the account field mappings
     foreach ($account in $existingAccounts) {
