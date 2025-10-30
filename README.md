@@ -36,6 +36,7 @@ Supported features:
 | **Resources**                       | ❌         | -                                                        |         |
 | **Entitlement Import: Accounts**    | ✅         | -                                                        |         |
 | **Entitlement Import: Permissions** | ❌         | -                                                        |         |
+| **Governance Reconciliation Resolutions** | ✅        | Delete                                                        | Delete is treated as a disable action with the option to update values. Please adjust the configuration accordingly in the delete script |
 
 _HelloID-Conn-Prov-Target-Zivver_ is a _target_ connector. Zivver provides secure communication solutions, primarily focused on email and file transfer. It offers a platform designed to protect sensitive information, such as personal data or confidential business data, from unauthorized access and interception.
 
@@ -142,6 +143,10 @@ The HelloID connector is designed to manage the following properties of the user
 Zivver only supports the `HTTP.PUT` method for updating user accounts, requiring the entire user object to be included in each call. If a partial `PUT` is used without the SsoAccountKey the SSO in Zivver will break.
 
 The Zivver user response is used and enriched with the necessary updates. This is how we ensure the entire user `GET` response is included in each `PUT` call.
+
+#### Governance remarks
+
+To ensure that accounts are actually deleted in Zivver, the option must be enabled in Zivver to automatically delete accounts after, for example, 90 days. This is because the HelloID delete action doesn't actually delete the account. The full name is appended to the delete action (Deleted by HelloID).
 
 #### Error handling
 

@@ -125,6 +125,15 @@ try {
     Write-Information "Queried Ziver account where [id] = [$($actionContext.References.Account)]. Result: $($correlatedAccount | ConvertTo-Json)"
     #endregion Get Zivver account
 
+    # Example reconciliation add data object
+    if ($actionContext.Origin -eq 'reconciliation') {
+        $data = [pscustomobject]@{ 
+            active   = $false
+            fullname = $correlatedAccount.name.formatted + " (Deleted by HelloID)"
+        }
+        $actionContext | Add-Member -MemberType NoteProperty -Name 'data' -Value $data -Force
+    }
+
     #region Calulate action
     $actionMessage = "calculating action"
     if (($correlatedAccount | Measure-Object).count -eq 1) {
@@ -147,12 +156,15 @@ try {
             $actionMessage = "disabling account"
 
             $body = @{
-                "schemas" = @(
-                    "urn:ietf:params:scim:schemas:core:2.0:User",
-                    "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User",
-                    "urn:ietf:params:scim:schemas:zivver:0.1:User"
+                schemas = @(
+                    'urn:ietf:params:scim:schemas:core:2.0:User',
+                    'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User',
+                    'urn:ietf:params:scim:schemas:zivver:0.1:User'
                 )
-                "active"  = $actionContext.Data.active
+                active  = $actionContext.Data.active
+                name    = [PSCustomObject]@{
+                    formatted = $actionContext.Data.fullname
+                }
             }
 
             $putZivverSplatParams = @{
