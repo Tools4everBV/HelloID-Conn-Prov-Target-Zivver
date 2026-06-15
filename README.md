@@ -33,16 +33,6 @@
   - [HelloID docs](#helloid-docs)
 
 ## Introduction
-Supported features:
-| Feature                             | Supported | Actions                                                  | Remarks |
-| ----------------------------------- | --------- | -------------------------------------------------------- | ------- |
-| **Account Lifecycle**               | ✅         | Create, Update, Enable, Disable, Delete (also a disable) |         |
-| **Permissions**                     | ✅         | Retrieve, Grant, Revoke groups                           |         |
-| **Resources**                       | ❌         | -                                                        |         |
-| **Entitlement Import: Accounts**    | ✅         | -                                                        |         |
-| **Entitlement Import: Permissions** | ❌         | -                                                        |         |
-| **Governance Reconciliation Resolutions** | ✅        | Delete                                                        | Delete is treated as a disable action with the option to update values. Please adjust the configuration accordingly in the delete script |
-
 _HelloID-Conn-Prov-Target-Zivver_ is a _target_ connector. _Zivver_ provides secure communication solutions, primarily focused on email and file transfer. It offers a platform designed to protect sensitive information, such as personal data or confidential business data, from unauthorized access and interception.
 
 ## Supported features
