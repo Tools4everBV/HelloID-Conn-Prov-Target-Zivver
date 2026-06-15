@@ -6,12 +6,6 @@
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-# Set debug logging
-switch ($actionContext.Configuration.isDebug) {
-    $true { $VerbosePreference = 'Continue' }
-    $false { $VerbosePreference = 'SilentlyContinue' }
-}
-
 #region mapping
 # Change mapping here
 $account = [PSCustomObject]@{
@@ -69,7 +63,7 @@ function Invoke-ZivverRestMethod {
             }
     
             if ($Body) {
-                Write-Verbose 'Adding body to request'
+                Write-Information 'Adding body to request'
                 $utf8Encoding = [System.Text.Encoding]::UTF8
                 $encodedBody = $utf8Encoding.GetBytes($body)
                 $splatParams['Body'] = $encodedBody
@@ -196,20 +190,6 @@ try {
             #region Update account
             $actionMessage = "updating account"
 
-            # Create custom object with old and new values (for logging)
-            $accountChangedPropertiesObject = [PSCustomObject]@{
-                OldValues = @{}
-                NewValues = @{}
-            }
-
-            foreach ($accountOldProperty in ($accountOldProperties | Where-Object { $_.Name -in $accountNewProperties.Name })) {
-                $accountChangedPropertiesObject.OldValues.$($accountOldProperty.Name) = $accountOldProperty.Value
-            }
-
-            foreach ($accountNewProperty in $accountNewProperties) {
-                $accountChangedPropertiesObject.NewValues.$($accountNewProperty.Name) = $accountNewProperty.Value
-            }
-
             # Change mapping here
             $correlatedAccount.name.formatted = $account.name.formatted
 
@@ -239,12 +219,12 @@ try {
                 $outputData = $updatedAccount
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Account with userName [$($updatedAccount.userName)] and AccountReference [$($outputContext.AccountReference)] updated. Old values: $($accountChangedPropertiesObject.oldValues | ConvertTo-Json). New values: $($accountChangedPropertiesObject.newValues | ConvertTo-Json)"
+                        Message = "Account with userName [$($updatedAccount.userName)] and AccountReference [$($outputContext.AccountReference)] updated.Account property(s) updated: [$($accountNewProperties.name -join ',')]"
                         IsError = $false
                     })
             }
             else {
-                Write-Warning "DryRun: Would update account with userName [$($correlatedAccount.userName)] and AccountReference [$($outputContext.AccountReference)]. Old values: $($accountChangedPropertiesObject.oldValues | ConvertTo-Json). New values: $($accountChangedPropertiesObject.newValues | ConvertTo-Json)"
+                Write-Warning "DryRun: Would update account with userName [$($correlatedAccount.userName)] and AccountReference [$($outputContext.AccountReference)]. Account property(s) updated: [$($accountNewProperties.name -join ',')]"
             }
 
             break
@@ -281,11 +261,11 @@ catch {
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-ZivverError -ErrorObject $ex
         $auditMessage = "Error $($actionMessage). Error: $($errorObj.FriendlyMessage)"
-        Write-Verbose "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
+        Write-Information "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     }
     else {
         $auditMessage = "Error $($actionMessage). Error: $($ex.Exception.Message)"
-        Write-Verbose "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+        Write-Information "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
     $outputContext.AuditLogs.Add([PSCustomObject]@{
             Message = $auditMessage
@@ -310,7 +290,6 @@ finally {
             ssoAccountKey = $account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.ssoAccountKey # ssoAccountKey is not returned by Zivver, account is mapped to make sure the same value is returned
             userName      = $outputData.userName
         }
-        Write-Verbose "output data to HelloID: [$($outputDataObject | Convertto-json)]"
         $outputContext.Data = $outputDataObject
 
         # Define your mapping here for returning the correct previous data to HelloID
@@ -322,7 +301,6 @@ finally {
             ssoAccountKey = $account.'urn:ietf:params:scim:schemas:zivver:0.1:User'.ssoAccountKey # ssoAccountKey is not returned by Zivver, account is mapped to make sure the same value is returned
             userName      = $outputPreviousData.userName
         }
-        Write-Verbose "output previous data to HelloID: [$($outputPreviousDataObject | Convertto-json)]"
         $outputContext.PreviousData = $outputPreviousDataObject
     }
 }

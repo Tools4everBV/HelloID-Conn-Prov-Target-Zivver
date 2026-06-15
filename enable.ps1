@@ -6,12 +6,6 @@
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-# Set debug logging
-switch ($actionContext.Configuration.isDebug) {
-    $true { $VerbosePreference = 'Continue' }
-    $false { $VerbosePreference = 'SilentlyContinue' }
-}
-
 #region functions
 function Invoke-ZivverRestMethod {
     [CmdletBinding()]
@@ -47,7 +41,7 @@ function Invoke-ZivverRestMethod {
             }
     
             if ($Body) {
-                Write-Verbose 'Adding body to request'
+                Write-Information 'Adding body to request'
                 $utf8Encoding = [System.Text.Encoding]::UTF8
                 $encodedBody = $utf8Encoding.GetBytes($body)
                 $splatParams['Body'] = $encodedBody
@@ -209,11 +203,11 @@ catch {
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-ZivverError -ErrorObject $ex
         $auditMessage = "Error $($actionMessage). Error: $($errorObj.FriendlyMessage)"
-        Write-Verbose "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
+        Write-Information "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     }
     else {
         $auditMessage = "Error $($actionMessage). Error: $($ex.Exception.Message)"
-        Write-Verbose "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+        Write-Information "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
     $outputContext.AuditLogs.Add([PSCustomObject]@{
             Message = $auditMessage
@@ -233,14 +227,12 @@ finally {
         $outputDataObject = [PSCustomObject]@{
             active = [string]$actionContext.Data.active # value is returned as boleaan
         }
-        Write-Verbose "output data to HelloID: [$($outputDataObject | Convertto-json)]"
         $outputContext.Data = $outputDataObject
         
         # Define your mapping here for returning the correct previous data to HelloID
         $outputPreviousDataObject = [PSCustomObject]@{
             active = [string]$correlatedAccount.active # value is returned as boleaan
         }
-        Write-Verbose "output previous data to HelloID: [$($outputPreviousDataObject | Convertto-json)]"
         $outputContext.PreviousData = $outputPreviousDataObject
     }
 }

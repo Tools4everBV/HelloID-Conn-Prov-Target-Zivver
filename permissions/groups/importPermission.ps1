@@ -57,23 +57,12 @@ try {
 
     $actionMessage = "querying Zivver Group Members"
     foreach ($zivverGroup in $zivverGroups) {          
-    
         $zivverGroupMembers = $zivverGroup.members
         $numberOfAccounts = $(($zivverGroupMembers | Measure-Object).Count)   
-
-        # Make sure the displayname has a value of max 100 char
-        if (-not([string]::IsNullOrEmpty($zivverGroup.displayName))) {
-            $displayname = $($zivverGroup.displayName).substring(0, [System.Math]::Min(100, $($zivverGroup.displayName).Length))
-        }
-        else {
-            $displayname = $zivverGroup.id
-        }
-        
         $permission = @{
             PermissionReference = @{
                 Reference = $zivverGroup.id
             }       
-            DisplayName         = $displayName
         }
 
         # Batch permissions based on the amount of account references, 

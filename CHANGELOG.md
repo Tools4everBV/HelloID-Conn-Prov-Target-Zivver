@@ -5,7 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com), and
 this project adheres to [Semantic Versioning](https://semver.org).
 
 
-## [2.3.0] - 05-24-2023
+## [2.3.0] - 24-05-2026
 
 ### Added
 - Added ImportPermissions
